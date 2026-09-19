@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ArrowRight, Check, ChevronLeft, Database, Heart, Link2, MessageCircle, RefreshCw, Sparkles, Stars, UserRound, Zap } from 'lucide-react'
 
 type PersonKey = 'a' | 'b'
@@ -11,7 +11,7 @@ type Persona = {
   interests: string[]
   style: string
 }
-type Message = { from: PersonKey; text: string }
+type Message = { from: PersonKey; text: string; reaction?: string }
 type CompatibilityVerdict = {
   score: number
   summary: string
@@ -209,8 +209,18 @@ function VerdictCard({ person, verdict }: { person: Persona; verdict: Compatibil
   return <article className="rounded-2xl border border-border bg-card p-5"><div className="flex items-start justify-between gap-4"><div className="flex items-center gap-3"><Avatar person={person} size="sm" /><div><h3 className="text-sm font-semibold">{person.name}&apos;s agent</h3><p className="text-xs text-muted-foreground">Simulated perspective</p></div></div><div className="rounded-xl bg-primary/10 px-3 py-2 text-center text-primary"><span className="block text-xl font-semibold leading-none">{verdict.score}</span><span className="mt-1 block text-[10px] font-semibold uppercase tracking-wider">score</span></div></div><p className="mt-4 text-sm leading-relaxed">{verdict.summary}</p><div className="mt-4 grid gap-4 sm:grid-cols-2"><div><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Strengths</p><ul className="mt-2 space-y-1.5 text-xs leading-relaxed">{verdict.strengths.map(item => <li className="flex gap-2" key={item}><Check className="mt-0.5 shrink-0 text-primary" size={13} /><span>{item}</span></li>)}</ul></div>{verdict.considerations.length > 0 && <div><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Considerations</p><ul className="mt-2 space-y-1.5 text-xs leading-relaxed">{verdict.considerations.map(item => <li className="flex gap-2" key={item}><span className="mt-1 size-1.5 shrink-0 rounded-full bg-muted-foreground" /><span>{item}</span></li>)}</ul></div>}</div></article>
 }
 
+const THINKING_MS = 900
+const REQUEST_TIMEOUT_MS = 150_000
+
+function friendlyError(reason: unknown) {
+  if (reason instanceof DOMException && reason.name === 'TimeoutError') return 'The simulation took too long. Please try again.'
+  if (reason instanceof TypeError) return "Couldn't reach the server. Check your connection and try again."
+  return reason instanceof Error ? reason.message : 'Unable to start the conversation.'
+}
+
 function DateView({ profiles, userIds, back }: { profiles: Record<PersonKey, Persona>; userIds: Partial<Record<PersonKey, string>>; back: () => void }) {
   const [conversation, setConversation] = useState<Message[]>([])
+  const [shown, setShown] = useState(0)
   const [verdicts, setVerdicts] = useState<Record<PersonKey, CompatibilityVerdict> | null>(null)
   const [compatibilityScore, setCompatibilityScore] = useState<number | null>(null)
   const [verdictUnavailable, setVerdictUnavailable] = useState(false)
@@ -221,6 +231,7 @@ function DateView({ profiles, userIds, back }: { profiles: Record<PersonKey, Per
     setLoading(true)
     setError('')
     setConversation([])
+    setShown(0)
     setVerdicts(null)
     setCompatibilityScore(null)
     setVerdictUnavailable(false)
@@ -229,21 +240,29 @@ function DateView({ profiles, userIds, back }: { profiles: Record<PersonKey, Per
         a: { ...profiles.a, ...(userIds.a ? { userId: userIds.a } : {}) },
         b: { ...profiles.b, ...(userIds.b ? { userId: userIds.b } : {}) },
       }
-      const response = await fetch('/api/match/conversation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ participants, turns: 6 }) })
+      const response = await fetch('/api/match/conversation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ participants, turns: 6 }), signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) })
       const data = await response.json().catch(() => ({})) as ConversationResponse
-      if (!response.ok || !data.messages) throw new Error(data.error ?? 'Unable to start the conversation.')
+      if (!response.ok || !data.messages) throw new Error(data.error ?? (response.status >= 500 ? 'The simulation service had a problem. Please try again.' : 'Unable to start the conversation.'))
       setConversation(data.messages)
       setVerdicts(data.verdicts ?? null)
       setCompatibilityScore(typeof data.compatibilityScore === 'number' ? data.compatibilityScore : null)
       setVerdictUnavailable(Boolean(data.verdictUnavailable))
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to start the conversation.')
+      setError(friendlyError(reason))
     } finally {
       setLoading(false)
     }
   }
 
-  return <main className="min-h-screen bg-background"><header className="mx-auto flex max-w-6xl items-center justify-between px-5 py-6 sm:px-8"><button onClick={back} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ChevronLeft size={17} /> Profiles</button><Logo /><Stepper step="date" /></header><div className="mx-auto max-w-3xl px-5 pb-12 sm:px-8"><div className="mb-7 text-center"><p className="text-xs font-semibold uppercase tracking-[.18em] text-primary">The first conversation</p><h1 className="mt-2 text-4xl font-semibold tracking-tight">Let&apos;s see how they talk.</h1><p className="mt-2 text-muted-foreground">A private, AI-to-AI simulation. User-reviewed personas guide the facts; imported public posts calibrate voice and pacing.</p></div><div className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm"><div className="flex items-center justify-between border-b border-border px-5 py-4"><div className="flex items-center gap-3"><Avatar person={profiles.a} size="sm" /><div className="text-xs"><b>{profiles.a.name}&apos;s agent</b><span className="mx-2 text-muted-foreground">&amp;</span><b>{profiles.b.name}&apos;s agent</b></div></div><span className="text-xs text-muted-foreground">{conversation.length} / 6 turns</span></div><div aria-live="polite" className="min-h-[390px] space-y-4 bg-gradient-to-b from-muted/35 to-background p-5 sm:p-8">{!conversation.length && !loading && <div className="grid min-h-[330px] place-items-center text-center text-sm text-muted-foreground">Start a six-turn simulation using the reviewed profiles and imported voice samples.</div>}{loading && <div className="grid min-h-[330px] place-items-center text-center text-sm text-muted-foreground"><span className="animate-pulse">The agents are getting acquainted, then reflecting on the exchange…</span></div>}{conversation.map((message, index) => <div key={`${message.from}-${index}`} className={`flex items-end gap-2 ${message.from === 'b' ? 'flex-row-reverse' : ''}`}><Avatar person={profiles[message.from]} size="sm" /><div className={`max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${message.from === 'a' ? 'rounded-bl-md bg-primary/10' : 'rounded-br-md bg-accent'}`}>{message.text}</div></div>)}{conversation.length > 0 && <section className="mt-8 border-t border-border pt-8"><div className="mx-auto max-w-lg text-center"><div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary"><Heart fill="currentColor" size={13} /> Conversation compatibility</div><p className="mt-3 text-sm leading-relaxed text-muted-foreground">Scores reflect conversational fit—not politeness, agreeableness, or a prediction of real-world compatibility.</p></div>{verdicts && compatibilityScore !== null && <><div className="mx-auto mt-5 grid size-32 place-items-center rounded-full border-8 border-primary/15 bg-card text-center shadow-sm"><div><div className="text-4xl font-semibold tracking-[-.06em] text-primary">{compatibilityScore}</div><div className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">combined score</div></div></div><div className="mt-6 grid gap-4">{(['a', 'b'] as PersonKey[]).map(person => <VerdictCard key={person} person={profiles[person]} verdict={verdicts[person]} />)}</div></>}{verdictUnavailable && <p role="status" className="mt-6 rounded-2xl border border-border bg-card p-4 text-center text-sm text-muted-foreground">The conversation is ready, but the compatibility verdict was unavailable for this run. Run another simulation to try again.</p>}</section>}{error && <p role="alert" className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}</div><div className="flex justify-start border-t border-border px-5 py-4"><Button variant="secondary" onClick={startConversation} disabled={loading}>{loading ? 'Generating…' : conversation.length ? 'Run another simulation' : 'Start simulation'} {conversation.length ? <RefreshCw size={15} /> : <Sparkles size={15} />}</Button></div></div></div></main>
+  useEffect(() => {
+    if (shown >= conversation.length) return
+    const timer = setTimeout(() => setShown(count => count + 1), THINKING_MS)
+    return () => clearTimeout(timer)
+  }, [shown, conversation])
+
+  const revealing = shown < conversation.length
+
+  return <main className="min-h-screen bg-background"><header className="mx-auto flex max-w-6xl items-center justify-between px-5 py-6 sm:px-8"><button onClick={back} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ChevronLeft size={17} /> Profiles</button><Logo /><Stepper step="date" /></header><div className="mx-auto max-w-3xl px-5 pb-12 sm:px-8"><div className="mb-7 text-center"><p className="text-xs font-semibold uppercase tracking-[.18em] text-primary">The first conversation</p><h1 className="mt-2 text-4xl font-semibold tracking-tight">Let&apos;s see how they talk.</h1><p className="mt-2 text-muted-foreground">A private, AI-to-AI simulation. User-reviewed personas guide the facts; imported public posts calibrate voice and pacing.</p></div><div className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm"><div className="flex items-center justify-between border-b border-border px-5 py-4"><div className="flex items-center gap-3"><Avatar person={profiles.a} size="sm" /><div className="text-xs"><b>{profiles.a.name}&apos;s agent</b><span className="mx-2 text-muted-foreground">&amp;</span><b>{profiles.b.name}&apos;s agent</b></div></div><span className="text-xs text-muted-foreground">{shown} / 6 turns</span></div><div aria-live="polite" className="min-h-[390px] space-y-4 bg-gradient-to-b from-muted/35 to-background p-5 sm:p-8">{!conversation.length && !loading && <div className="grid min-h-[330px] place-items-center text-center text-sm text-muted-foreground">Start a six-turn simulation using the reviewed profiles and imported voice samples.</div>}{loading && <div className="grid min-h-[330px] place-items-center text-center text-sm text-muted-foreground"><span className="animate-pulse">The agents are getting acquainted, then reflecting on the exchange…</span></div>}{conversation.slice(0, shown).map((message, index) => <div key={`${message.from}-${index}`} className={`flex items-end gap-2 ${message.from === 'b' ? 'flex-row-reverse' : ''}`}><Avatar person={profiles[message.from]} size="sm" /><div className={`max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed animate-in fade-in duration-500 motion-reduce:animate-none ${message.from === 'a' ? 'rounded-bl-md bg-primary/10' : 'rounded-br-md bg-accent'}`}>{message.text}</div></div>)}{revealing && <div key={`thinking-${shown}`} className={`flex items-end gap-2 ${conversation[shown].from === 'b' ? 'flex-row-reverse' : ''}`}><Avatar person={profiles[conversation[shown].from]} size="sm" /><div className={`max-w-[75%] rounded-2xl border border-dashed border-border bg-muted/60 px-4 py-3 text-sm leading-relaxed text-muted-foreground ${conversation[shown].from === 'a' ? 'rounded-bl-md' : 'rounded-br-md'}`}>{conversation[shown].reaction ? <em><span className="sr-only">Thinking: </span>{conversation[shown].reaction}</em> : <span role="status" aria-label="Typing" className="flex gap-1 py-1"><i className="size-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:-.3s]" /><i className="size-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:-.15s]" /><i className="size-1.5 animate-bounce rounded-full bg-muted-foreground" /></span>}</div></div>}{conversation.length > 0 && !revealing && <section className="mt-8 border-t border-border pt-8"><div className="mx-auto max-w-lg text-center"><div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary"><Heart fill="currentColor" size={13} /> Conversation compatibility</div><p className="mt-3 text-sm leading-relaxed text-muted-foreground">Two independent AI perspectives on this single simulated exchange—not a prediction of real-world compatibility.</p></div>{verdicts && compatibilityScore !== null && <><div className="mx-auto mt-5 grid size-32 place-items-center rounded-full border-8 border-primary/15 bg-card text-center shadow-sm"><div><div className="text-4xl font-semibold tracking-[-.06em] text-primary">{compatibilityScore}</div><div className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">combined score</div></div></div><div className="mt-6 grid gap-4">{(['a', 'b'] as PersonKey[]).map(person => <VerdictCard key={person} person={profiles[person]} verdict={verdicts[person]} />)}</div></>}{verdictUnavailable && <p role="status" className="mt-6 rounded-2xl border border-border bg-card p-4 text-center text-sm text-muted-foreground">The conversation is ready, but the compatibility verdict was unavailable for this run. Run another simulation to try again.</p>}</section>}{error && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-destructive/10 p-3 text-sm text-destructive"><span>{error}</span><button type="button" onClick={startConversation} className="rounded-lg border border-destructive/30 px-3 py-1.5 text-xs font-semibold hover:bg-destructive/10">Try again</button></div>}</div><div className="flex justify-start border-t border-border px-5 py-4"><Button variant="secondary" onClick={startConversation} disabled={loading}>{loading ? 'Generating…' : conversation.length ? 'Run another simulation' : 'Start simulation'} {conversation.length ? <RefreshCw size={15} /> : <Sparkles size={15} />}</Button></div></div></div></main>
 }
 
 export default function AIMatchmaker() {
