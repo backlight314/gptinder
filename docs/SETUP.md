@@ -33,9 +33,11 @@ Set `OPENAI_API_KEY` and `OPENAI_MODEL` in `.env.local`. The mock command suppli
 
 1. Click **Get started**.
 2. Click **Use a demo sign-in key**.
-3. Enter a display name, confirm you are 18 or older, and create the account.
-4. Save the displayed private sign-in key.
-5. Repeat in separate Chrome/Edge profiles for other demo participants.
+3. Click **Create a new local demo account**.
+4. Enter a display name and confirm you are 18 or older.
+5. Click **Create demo account**.
+6. Save the displayed private sign-in key.
+7. Repeat in separate Chrome/Edge profiles for other demo participants.
 
 `pnpm mock:dev` is the simplest local mode. It does not require Atlas or Resend. Real OpenAI credentials are still required for live AI questions and conversations; automated tests mock those calls.
 

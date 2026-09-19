@@ -123,15 +123,31 @@ function Welcome({
 }) {
   const [form, setForm] = useState(false)
   const [login, setLogin] = useState(false)
+  const [demoRegister, setDemoRegister] = useState(false)
   const [key, setKey] = useState('')
+  const [name, setName] = useState('')
+  const [adult, setAdult] = useState(false)
+  const [accessKey, setAccessKey] = useState('')
   const [error, setError] = useState(initialError)
   const [busy, setBusy] = useState(false)
   const submit = async () => {
     setBusy(true)
     setError('')
     try {
-      await api('/api/auth', 'POST', { action: 'login', accessKey: key.trim() })
-      await onSignedIn()
+      if (demoRegister) {
+        const result = await api<{ accessKey: string }>('/api/auth', 'POST', {
+          action: 'register',
+          displayName: name.trim(),
+          adult,
+        })
+        setAccessKey(result.accessKey)
+      } else {
+        await api('/api/auth', 'POST', {
+          action: 'login',
+          accessKey: key.trim(),
+        })
+        await onSignedIn()
+      }
     } catch (e) {
       setError(errorMessage(e))
     } finally {
@@ -214,6 +230,26 @@ function Welcome({
                   Use a demo sign-in key
                 </Button>
               </>
+            ) : accessKey ? (
+              <>
+                <h2 className="text-2xl font-semibold">Save your demo key</h2>
+                <p className="my-4 text-sm text-muted-foreground">
+                  This key is shown once. Save it before continuing.
+                </p>
+                <code className="block break-all rounded-xl bg-muted p-4 text-sm">
+                  {accessKey}
+                </code>
+                <Button
+                  className="mt-4"
+                  variant="secondary"
+                  onClick={() => navigator.clipboard.writeText(accessKey)}
+                >
+                  Copy key
+                </Button>
+                <Button className="mt-4" onClick={() => void onSignedIn()}>
+                  I saved it — continue
+                </Button>
+              </>
             ) : (
               <form
                 onSubmit={(e) => {
@@ -221,30 +257,74 @@ function Welcome({
                   void submit()
                 }}
               >
-                <h2 className="mb-5 text-2xl font-semibold">Welcome back.</h2>
-                <label className="text-sm font-semibold">
-                  Private demo sign-in key
-                  <input
-                    autoComplete="off"
-                    type="password"
-                    className={`${inputClass} my-3`}
-                    value={key}
-                    onChange={(e) => setKey(e.target.value)}
-                    maxLength={64}
-                    required
-                  />
-                </label>
+                <h2 className="mb-5 text-2xl font-semibold">
+                  {demoRegister
+                    ? 'Create local demo account.'
+                    : 'Welcome back.'}
+                </h2>
+                {demoRegister ? (
+                  <>
+                    <label className="text-sm font-semibold">
+                      Display name
+                      <input
+                        className={`${inputClass} my-3`}
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        maxLength={60}
+                        required
+                      />
+                    </label>
+                    <label className="my-4 flex gap-3 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={adult}
+                        onChange={(e) => setAdult(e.target.checked)}
+                        required
+                      />
+                      I am 18 or older.
+                    </label>
+                  </>
+                ) : (
+                  <label className="text-sm font-semibold">
+                    Existing demo sign-in key
+                    <input
+                      autoComplete="off"
+                      type="password"
+                      className={`${inputClass} my-3`}
+                      value={key}
+                      onChange={(e) => setKey(e.target.value)}
+                      maxLength={64}
+                      required
+                    />
+                  </label>
+                )}
                 <Button type="submit" disabled={busy}>
-                  {busy ? 'Connecting…' : 'Sign in'}
+                  {busy
+                    ? 'Connecting…'
+                    : demoRegister
+                      ? 'Create demo account'
+                      : 'Sign in'}
                   <Sparkles size={16} />
                 </Button>
                 <Button
                   type="button"
                   variant="ghost"
-                  onClick={() => setLogin(false)}
+                  onClick={() => {
+                    setLogin(false)
+                    setDemoRegister(false)
+                  }}
                 >
                   Use email sign-in / recovery
                 </Button>
+                {!demoRegister && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setDemoRegister(true)}
+                  >
+                    Create a new local demo account
+                  </Button>
+                )}
               </form>
             )}
             <ErrorNotice error={error} />
