@@ -55,16 +55,6 @@ export type ProfileImageAsset = {
   bytes: Uint8Array
 }
 
-export type ImportedPersona = {
-  name: string
-  handle: string
-  traits: string[]
-  interests: string[]
-  style: string
-  bio: string
-  color: 'coral' | 'violet'
-}
-
 export type SocialImportPayload = {
   provider?: 'apify'
   importMetadata?: Record<string, unknown>
@@ -76,5 +66,4 @@ export type SocialImportPayload = {
   profileImage: ProfileImageAsset | null
   coverImage: ProfileImageAsset | null
   profileSourceData: Record<string, unknown>
-  persona: ImportedPersona
 }
