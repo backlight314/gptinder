@@ -10,8 +10,7 @@ This repository is linked to a [v0](https://v0.app) project. You can continue de
 
 ## Public profile imports
 
-The profile form uses Apify for LinkedIn, Instagram, and X, with Browserbase as
-an optional fallback. It captures profile fields, posts, comments/replies, and
+The profile form uses Apify for LinkedIn, Instagram, and X. It captures profile fields, posts, comments/replies, and
 sections such as experience, education, certifications, projects, and skills,
 then stores queryable records plus the complete raw social data in MongoDB.
 Credentials never reach the browser client.
@@ -22,11 +21,6 @@ Copy `.env.example` to `.env.local` and set:
 MONGODB_URI="mongodb+srv://..."
 MONGODB_DB="gptinder"
 APIFY_TOKEN="apify_api_..."
-BROWSERBASE_API_KEY="..."
-# Optional for older/unscoped Browserbase keys:
-BROWSERBASE_PROJECT_ID="..."
-# Optional fallback context if APIFY_TOKEN is not configured:
-BROWSERBASE_LINKEDIN_CONTEXT_ID="..."
 PROFILE_IMPORT_MAX_POSTS="12"
 ```
 

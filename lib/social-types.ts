@@ -66,7 +66,7 @@ export type ImportedPersona = {
 }
 
 export type SocialImportPayload = {
-  provider?: 'apify' | 'browserbase'
+  provider?: 'apify'
   importMetadata?: Record<string, unknown>
   warnings?: string[]
   profile: NormalizedSocialProfile
