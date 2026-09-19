@@ -10,9 +10,23 @@ This repository is linked to a [v0](https://v0.app) project. You can continue de
 
 ## Getting Started
 
+Create a local environment file from the example and fill in the server-only
+credentials for the two already-populated persona Vector Stores:
+
+```bash
+cp .env.example .env.local
+```
+
+`OPENAI_API_KEY`, `OPENAI_VECTOR_STORE_ID_A`, and
+`OPENAI_VECTOR_STORE_ID_B` must remain in `.env.local`; they are never sent to
+the browser. The app does not create Vector Stores, upload persona material,
+or connect to a dating platform.
+
 First, run the development server:
 
 ```bash
+# This project uses the NVM default configured in ~/.zshrc (currently Node 22).
+nvm use default
 npm run dev
 # or
 yarn dev
