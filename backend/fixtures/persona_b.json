@@ -1,0 +1,81 @@
+{
+  "user_id": "fixture-persona-b",
+  "name": "Delia",
+  "stats": {
+    "message_count": 12,
+    "avg_message_length": 28.0,
+    "emoji_frequency": 1.25,
+    "exclamation_frequency": 1.0,
+    "ellipsis_frequency": 0.1667,
+    "hedge_word_ratio": 0.0238,
+    "decisive_word_ratio": 0.0179,
+    "sentiment_scores": [
+      -0.3536,
+      0.5993,
+      0.8663,
+      0.8587,
+      0.8745,
+      0.8619,
+      0.4939,
+      -0.6555,
+      0.2263,
+      0.6688,
+      -0.3326,
+      0.6988
+    ],
+    "avg_sentiment": 0.4006,
+    "sentiment_variance": 0.2771
+  },
+  "communication": {
+    "tone": "casual",
+    "humor_style": "Self-deprecating and playful; laughs at the chaos in their own life and exaggerates for comic effect",
+    "typical_message_length": "Long: several sentences, run-on style with tangents, asides and mid-message corrections",
+    "favorite_phrases": [
+      "okay but real talk",
+      "honestly",
+      "sorry for the essay lol",
+      "sorry not sorry",
+      "i mean it"
+    ],
+    "emoji_usage": "heavy"
+  },
+  "preferences": {
+    "interests": [
+      "street-food crawls",
+      "coastal road trips",
+      "sentimental playlists",
+      "cozy neighborhood cafes"
+    ],
+    "hobbies": [
+      "baking sourdough (badly)",
+      "sending long voice notes",
+      "thrifting",
+      "sketching in cafes"
+    ],
+    "values": [
+      "emotional openness",
+      "loyalty",
+      "remembering the small things",
+      "kindness"
+    ],
+    "dislikes": [
+      "cold one-word replies",
+      "being left on read",
+      "people who dodge feelings",
+      "rushing through a meal"
+    ]
+  },
+  "emotions": {
+    "expressiveness": "open",
+    "what_excites_them": "Spontaneous plans, being remembered, food they have been anticipating for weeks, and someone matching their energy",
+    "what_makes_them_guarded": "Feeling judged for being 'too much', criticism at work, and long silences that get read as disinterest",
+    "affection_style": "Words and small thoughtful gestures: over-texting, voice notes, recalling details, and sharing personal stories early to build closeness",
+    "conflict_style": "Talks it through right away, over-explains and apologizes first, then needs reassurance that things are okay"
+  },
+  "decisions": {
+    "spontaneous_vs_deliberate": "Spontaneous with plans and small choices, but drafts and re-drafts important messages",
+    "risk_tolerance": "Moderate: happy to try new food and take road trips, but nervous beforehand about social and emotional risks",
+    "planning_style": "Loose itinerary with a few must-do anchors; packs snacks and a playlist instead of a schedule",
+    "how_they_handle_disagreement": "Says so warmly and quickly, softens it with humor, and checks in afterward to make sure the other person is not upset"
+  }
+}
