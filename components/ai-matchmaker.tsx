@@ -82,7 +82,7 @@ function ProfilePreview({ persona, user }: { persona: Persona; user: PersonKey }
   return <aside className="rounded-3xl border border-primary/20 bg-primary/5 p-5 sm:p-6"><p className="text-xs font-semibold uppercase tracking-[.18em] text-primary">Stored agent snapshot</p><div className="mt-4 flex items-center gap-3"><Avatar person={persona} size="md" /><div><p className="font-semibold">{persona.name || `Person ${user === 'a' ? 'one' : 'two'}`}</p><p className="text-xs text-muted-foreground">Saved to MongoDB when you confirm this form.</p></div></div><dl className="mt-5 space-y-4 text-sm"><div><dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Bio</dt><dd className="mt-1 leading-relaxed">{persona.bio || 'Add a concise description.'}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Traits</dt><dd className="mt-2 flex flex-wrap gap-2">{persona.traits.length ? persona.traits.map(item => <span key={item} className="rounded-full bg-card px-2.5 py-1 text-xs font-medium">{item}</span>) : 'Add traits.'}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Interests</dt><dd className="mt-2 flex flex-wrap gap-2">{persona.interests.length ? persona.interests.map(item => <span key={item} className="rounded-full bg-card px-2.5 py-1 text-xs font-medium">{item}</span>) : 'Add interests.'}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Conversation style</dt><dd className="mt-1 leading-relaxed">{persona.style || 'Describe their voice and pacing.'}</dd></div></dl></aside>
 }
 
-function Profile({ user, initial, next, back }: { user: PersonKey; initial: Persona; next: (persona: Persona, userId: string) => void; back: () => void }) {
+function Profile({ user, initial, initialUserId, next, onUserId, back }: { user: PersonKey; initial: Persona; initialUserId?: string; next: (persona: Persona, userId: string) => void; onUserId: (userId: string) => void; back: () => void }) {
   const [persona, setPersona] = useState(initial)
   const [links, setLinks] = useState<SocialLinks>({ linkedin: '', instagram: '', x: '' })
   const [consent, setConsent] = useState(false)
@@ -91,9 +91,10 @@ function Profile({ user, initial, next, back }: { user: PersonKey; initial: Pers
   const [importStatus, setImportStatus] = useState('')
   const [saveError, setSaveError] = useState('')
   const [saving, setSaving] = useState(false)
-  const [userId, setUserId] = useState<string>()
+  const [userId, setUserId] = useState<string | undefined>(initialUserId)
   const isValid = Boolean(persona.name.trim() && persona.bio.trim() && persona.style.trim() && persona.traits.length && persona.interests.length)
   const urls = Object.values(links).map((value) => value.trim()).filter(Boolean)
+  const linksNeedImport = urls.length > 0 && !userId
   const change = <K extends keyof Persona>(key: K, value: Persona[K]) => setPersona(current => ({ ...current, [key]: value }))
   const changeLink = (platform: keyof SocialLinks, value: string) => setLinks(current => ({ ...current, [platform]: value }))
 
@@ -112,6 +113,7 @@ function Profile({ user, initial, next, back }: { user: PersonKey; initial: Pers
         throw new Error(data.error ?? 'Unable to import these social profiles.')
       }
       setUserId(data.userId)
+      onUserId(data.userId)
       setImportStatus(`Stored ${data.storedProfileCount ?? urls.length} profiles, ${data.storedPostCount ?? 0} posts, and ${data.storedCommentCount ?? 0} comments under ${data.userId}. Re-importing updates these records without duplicates.`)
     } catch (reason) {
       setImportError(reason instanceof Error ? reason.message : 'Unable to import these social profiles.')
@@ -121,6 +123,10 @@ function Profile({ user, initial, next, back }: { user: PersonKey; initial: Pers
   }
 
   const savePersona = async () => {
+    if (linksNeedImport) {
+      setSaveError('Store the entered social links first so this persona uses the same canonical user record.')
+      return
+    }
     setSaving(true)
     setSaveError('')
     try {
@@ -132,6 +138,7 @@ function Profile({ user, initial, next, back }: { user: PersonKey; initial: Pers
       const data = await response.json().catch(() => ({})) as PersonaSaveResponse
       if (!response.ok || !data.userId) throw new Error(data.error ?? 'Unable to save this persona.')
       setUserId(data.userId)
+      onUserId(data.userId)
       next(persona, data.userId)
     } catch (reason) {
       setSaveError(reason instanceof Error ? reason.message : 'Unable to save this persona.')
@@ -139,6 +146,8 @@ function Profile({ user, initial, next, back }: { user: PersonKey; initial: Pers
       setSaving(false)
     }
   }
+
+  const canSave = isValid && !saving && !linksNeedImport
 
   return (
     <main className="min-h-screen bg-background">
@@ -190,7 +199,8 @@ function Profile({ user, initial, next, back }: { user: PersonKey; initial: Pers
               <label htmlFor={`style-${user}`}><span className="text-sm font-semibold">Conversation style</span><span className="mt-1 block text-xs text-muted-foreground">Describe tone, pacing, humor, and message length.</span><textarea id={`style-${user}`} required maxLength={400} rows={3} value={persona.style} onChange={event => change('style', event.target.value)} className="mt-2 w-full resize-y rounded-xl border border-border bg-background p-3 text-sm outline-none ring-primary focus:ring-2" /></label>
             </div>
             {saveError && <p role="alert" className="mt-5 rounded-xl bg-destructive/10 p-3 text-xs leading-relaxed text-destructive">{saveError}</p>}
-            <div className="mt-8 flex justify-end"><Button type="submit" disabled={!isValid || saving}>{saving ? 'Saving persona…' : 'Save persona and continue'} <ArrowRight size={17} /></Button></div>
+            {linksNeedImport && <p className="mt-5 rounded-xl bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-700 dark:text-amber-300">Store the entered social links first. This keeps the imported profiles and this persona on one user record.</p>}
+            <div className="mt-8 flex justify-end"><Button type="submit" disabled={!canSave}>{saving ? 'Saving persona…' : 'Save persona and continue'} <ArrowRight size={17} /></Button></div>
           </form>
           <ProfilePreview persona={persona} user={user} />
         </div>
@@ -239,13 +249,18 @@ function DateView({ profiles, back }: { profiles: Record<PersonKey, Persona>; ba
 export default function AIMatchmaker() {
   const [step, setStep] = useState<Step>('landing')
   const [profiles, setProfiles] = useState<Record<PersonKey, Persona>>(starterPersonas)
+  const [userIds, setUserIds] = useState<Partial<Record<PersonKey, string>>>({})
   const saveProfile = (user: PersonKey) => (persona: Persona, _userId: string) => {
     setProfiles(current => ({ ...current, [user]: persona }))
+    setUserIds(current => ({ ...current, [user]: _userId }))
     setStep(user === 'a' ? 'profile-b' : 'date')
   }
+  const rememberUserId = (user: PersonKey) => (userId: string) => {
+    setUserIds(current => ({ ...current, [user]: userId }))
+  }
   if (step === 'landing') return <Landing start={() => setStep('profile-a')} />
-  if (step === 'profile-a') return <Profile key="profile-a" user="a" initial={profiles.a} next={saveProfile('a')} back={() => setStep('landing')} />
-  if (step === 'profile-b') return <Profile key="profile-b" user="b" initial={profiles.b} next={saveProfile('b')} back={() => setStep('profile-a')} />
+  if (step === 'profile-a') return <Profile key="profile-a" user="a" initial={profiles.a} initialUserId={userIds.a} next={saveProfile('a')} onUserId={rememberUserId('a')} back={() => setStep('landing')} />
+  if (step === 'profile-b') return <Profile key="profile-b" user="b" initial={profiles.b} initialUserId={userIds.b} next={saveProfile('b')} onUserId={rememberUserId('b')} back={() => setStep('profile-a')} />
   return <DateView profiles={profiles} back={() => setStep('profile-b')} />
 }
 
