@@ -48,18 +48,24 @@ export async function storeSocialImport(payload: SocialImportPayload, requestedU
   const profileCollection = database.collection(PROFILE_COLLECTIONS[payload.profile.platform])
   const rawProfile = rawDocument(payload.profileSourceData)
   const platformIdentity = String(rawProfile.id || payload.profile.externalId || payload.profile.handle)
-  const profileIdentity = rawProfile.id
-    ? { id: rawProfile.id }
-    : requestedUserId
-      ? { userId: requestedUserId }
-      : { userId: '__new_profile__' }
+  const profileIdentity = {
+    $or: [
+      ...(rawProfile.id ? [{ id: rawProfile.id }] : []),
+      { sourceUrl: payload.profile.sourceUrl },
+      { url: payload.profile.sourceUrl },
+      ...(requestedUserId ? [{ userId: requestedUserId }] : []),
+    ],
+  }
 
   const existingProfile = await profileCollection.findOne(
     profileIdentity,
-    { projection: { userId: 1 } },
+    { projection: { _id: 1, userId: 1 } },
   )
-  const userId = requestedUserId
-    || (typeof existingProfile?.userId === 'string' ? existingProfile.userId : null)
+  // An exact external profile identity is the source of truth. This prevents a
+  // retry from moving a profile to a newly generated user just because the UI
+  // supplied a different local userId.
+  const userId = (typeof existingProfile?.userId === 'string' ? existingProfile.userId : null)
+    || requestedUserId
     || personalizedUserId(payload.profile.name, `${payload.profile.platform}:${platformIdentity}`)
 
   await database.collection<{ _id: string; displayName: string; createdAt: Date; updatedAt: Date }>('users').updateOne(
@@ -71,8 +77,13 @@ export async function storeSocialImport(payload: SocialImportPayload, requestedU
     { upsert: true },
   )
 
+  const profileFilter = rawProfile.id
+    ? { id: rawProfile.id }
+    : existingProfile?._id
+      ? { _id: existingProfile._id }
+      : { userId }
   const profileResult = await profileCollection.findOneAndUpdate(
-    rawProfile.id ? { id: rawProfile.id } : { userId },
+    profileFilter,
     { $set: { ...rawProfile, userId, syncedAt: now } },
     { upsert: true, returnDocument: 'after' },
   )

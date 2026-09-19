@@ -32,6 +32,12 @@ type ImportResponse = {
   storedCommentCount?: number
   error?: string
 }
+type PersonaSaveResponse = {
+  userId?: string
+  personaId?: string
+  revision?: number
+  error?: string
+}
 type SocialLinks = { linkedin: string; instagram: string; x: string }
 type Step = 'landing' | 'profile-a' | 'profile-b' | 'date'
 
@@ -73,19 +79,22 @@ function CsvField({ id, label, hint, value, onChange }: { id: string; label: str
 }
 
 function ProfilePreview({ persona, user }: { persona: Persona; user: PersonKey }) {
-  return <aside className="rounded-3xl border border-primary/20 bg-primary/5 p-5 sm:p-6"><p className="text-xs font-semibold uppercase tracking-[.18em] text-primary">Exact agent snapshot</p><div className="mt-4 flex items-center gap-3"><Avatar person={persona} size="md" /><div><p className="font-semibold">{persona.name || `Person ${user === 'a' ? 'one' : 'two'}`}</p><p className="text-xs text-muted-foreground">This is the only profile summary sent with the request.</p></div></div><dl className="mt-5 space-y-4 text-sm"><div><dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Bio</dt><dd className="mt-1 leading-relaxed">{persona.bio || 'Add a concise description.'}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Traits</dt><dd className="mt-2 flex flex-wrap gap-2">{persona.traits.length ? persona.traits.map(item => <span key={item} className="rounded-full bg-card px-2.5 py-1 text-xs font-medium">{item}</span>) : 'Add traits.'}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Interests</dt><dd className="mt-2 flex flex-wrap gap-2">{persona.interests.length ? persona.interests.map(item => <span key={item} className="rounded-full bg-card px-2.5 py-1 text-xs font-medium">{item}</span>) : 'Add interests.'}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Conversation style</dt><dd className="mt-1 leading-relaxed">{persona.style || 'Describe their voice and pacing.'}</dd></div></dl></aside>
+  return <aside className="rounded-3xl border border-primary/20 bg-primary/5 p-5 sm:p-6"><p className="text-xs font-semibold uppercase tracking-[.18em] text-primary">Stored agent snapshot</p><div className="mt-4 flex items-center gap-3"><Avatar person={persona} size="md" /><div><p className="font-semibold">{persona.name || `Person ${user === 'a' ? 'one' : 'two'}`}</p><p className="text-xs text-muted-foreground">Saved to MongoDB when you confirm this form.</p></div></div><dl className="mt-5 space-y-4 text-sm"><div><dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Bio</dt><dd className="mt-1 leading-relaxed">{persona.bio || 'Add a concise description.'}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Traits</dt><dd className="mt-2 flex flex-wrap gap-2">{persona.traits.length ? persona.traits.map(item => <span key={item} className="rounded-full bg-card px-2.5 py-1 text-xs font-medium">{item}</span>) : 'Add traits.'}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Interests</dt><dd className="mt-2 flex flex-wrap gap-2">{persona.interests.length ? persona.interests.map(item => <span key={item} className="rounded-full bg-card px-2.5 py-1 text-xs font-medium">{item}</span>) : 'Add interests.'}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Conversation style</dt><dd className="mt-1 leading-relaxed">{persona.style || 'Describe their voice and pacing.'}</dd></div></dl></aside>
 }
 
-function Profile({ user, initial, next, back }: { user: PersonKey; initial: Persona; next: (persona: Persona) => void; back: () => void }) {
+function Profile({ user, initial, initialUserId, next, onUserId, back }: { user: PersonKey; initial: Persona; initialUserId?: string; next: (persona: Persona, userId: string) => void; onUserId: (userId: string) => void; back: () => void }) {
   const [persona, setPersona] = useState(initial)
   const [links, setLinks] = useState<SocialLinks>({ linkedin: '', instagram: '', x: '' })
   const [consent, setConsent] = useState(false)
   const [importing, setImporting] = useState(false)
   const [importError, setImportError] = useState('')
   const [importStatus, setImportStatus] = useState('')
-  const [userId, setUserId] = useState<string>()
+  const [saveError, setSaveError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [userId, setUserId] = useState<string | undefined>(initialUserId)
   const isValid = Boolean(persona.name.trim() && persona.bio.trim() && persona.style.trim() && persona.traits.length && persona.interests.length)
   const urls = Object.values(links).map((value) => value.trim()).filter(Boolean)
+  const linksNeedImport = urls.length > 0 && !userId
   const change = <K extends keyof Persona>(key: K, value: Persona[K]) => setPersona(current => ({ ...current, [key]: value }))
   const changeLink = (platform: keyof SocialLinks, value: string) => setLinks(current => ({ ...current, [platform]: value }))
 
@@ -104,6 +113,7 @@ function Profile({ user, initial, next, back }: { user: PersonKey; initial: Pers
         throw new Error(data.error ?? 'Unable to import these social profiles.')
       }
       setUserId(data.userId)
+      onUserId(data.userId)
       setImportStatus(`Stored ${data.storedProfileCount ?? urls.length} profiles, ${data.storedPostCount ?? 0} posts, and ${data.storedCommentCount ?? 0} comments under ${data.userId}. Re-importing updates these records without duplicates.`)
     } catch (reason) {
       setImportError(reason instanceof Error ? reason.message : 'Unable to import these social profiles.')
@@ -111,6 +121,33 @@ function Profile({ user, initial, next, back }: { user: PersonKey; initial: Pers
       setImporting(false)
     }
   }
+
+  const savePersona = async () => {
+    if (linksNeedImport) {
+      setSaveError('Store the entered social links first so this persona uses the same canonical user record.')
+      return
+    }
+    setSaving(true)
+    setSaveError('')
+    try {
+      const response = await fetch('/api/personas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slot: user, persona, ...(userId ? { userId } : {}) }),
+      })
+      const data = await response.json().catch(() => ({})) as PersonaSaveResponse
+      if (!response.ok || !data.userId) throw new Error(data.error ?? 'Unable to save this persona.')
+      setUserId(data.userId)
+      onUserId(data.userId)
+      next(persona, data.userId)
+    } catch (reason) {
+      setSaveError(reason instanceof Error ? reason.message : 'Unable to save this persona.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const canSave = isValid && !saving && !linksNeedImport
 
   return (
     <main className="min-h-screen bg-background">
@@ -126,7 +163,7 @@ function Profile({ user, initial, next, back }: { user: PersonKey; initial: Pers
           <p className="mt-2 text-muted-foreground">Store owner-approved social data in MongoDB. The personality fields stay entirely user-authored.</p>
         </div>
         <div className="grid gap-6 lg:grid-cols-[1.1fr_.9fr]">
-          <form onSubmit={event => { event.preventDefault(); if (isValid) next(persona) }} className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-8">
+          <form onSubmit={event => { event.preventDefault(); if (isValid && !saving) void savePersona() }} className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-8">
             <section className="mb-7 rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-5">
               <div className="flex items-start gap-3">
                 <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground"><Link2 size={17} /></span>
@@ -161,7 +198,9 @@ function Profile({ user, initial, next, back }: { user: PersonKey; initial: Pers
               <div className="grid gap-5 sm:grid-cols-2"><CsvField id={`traits-${user}`} label="Traits" hint="Comma-separated, for example: warm, direct" value={persona.traits} onChange={items => change('traits', items)} /><CsvField id={`interests-${user}`} label="Interests" hint="Comma-separated conversation material" value={persona.interests} onChange={items => change('interests', items)} /></div>
               <label htmlFor={`style-${user}`}><span className="text-sm font-semibold">Conversation style</span><span className="mt-1 block text-xs text-muted-foreground">Describe tone, pacing, humor, and message length.</span><textarea id={`style-${user}`} required maxLength={400} rows={3} value={persona.style} onChange={event => change('style', event.target.value)} className="mt-2 w-full resize-y rounded-xl border border-border bg-background p-3 text-sm outline-none ring-primary focus:ring-2" /></label>
             </div>
-            <div className="mt-8 flex justify-end"><Button type="submit" disabled={!isValid}>Confirm this snapshot <ArrowRight size={17} /></Button></div>
+            {saveError && <p role="alert" className="mt-5 rounded-xl bg-destructive/10 p-3 text-xs leading-relaxed text-destructive">{saveError}</p>}
+            {linksNeedImport && <p className="mt-5 rounded-xl bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-700 dark:text-amber-300">Store the entered social links first. This keeps the imported profiles and this persona on one user record.</p>}
+            <div className="mt-8 flex justify-end"><Button type="submit" disabled={!canSave}>{saving ? 'Saving persona…' : 'Save persona and continue'} <ArrowRight size={17} /></Button></div>
           </form>
           <ProfilePreview persona={persona} user={user} />
         </div>
@@ -204,19 +243,24 @@ function DateView({ profiles, back }: { profiles: Record<PersonKey, Persona>; ba
     }
   }
 
-  return <main className="min-h-screen bg-background"><header className="mx-auto flex max-w-6xl items-center justify-between px-5 py-6 sm:px-8"><button onClick={back} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ChevronLeft size={17} /> Profiles</button><Logo /><Stepper step="date" /></header><div className="mx-auto max-w-3xl px-5 pb-12 sm:px-8"><div className="mb-7 text-center"><p className="text-xs font-semibold uppercase tracking-[.18em] text-primary">The first conversation</p><h1 className="mt-2 text-4xl font-semibold tracking-tight">Let&apos;s see how they talk.</h1><p className="mt-2 text-muted-foreground">A private, AI-to-AI simulation. It is not a real conversation, is not retained by this app, and nothing is sent anywhere.</p></div><div className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm"><div className="flex items-center justify-between border-b border-border px-5 py-4"><div className="flex items-center gap-3"><Avatar person={profiles.a} size="sm" /><div className="text-xs"><b>{profiles.a.name}&apos;s agent</b><span className="mx-2 text-muted-foreground">&amp;</span><b>{profiles.b.name}&apos;s agent</b></div></div><span className="text-xs text-muted-foreground">{conversation.length} / 6 turns</span></div><div aria-live="polite" className="min-h-[390px] space-y-4 bg-gradient-to-b from-muted/35 to-background p-5 sm:p-8">{!conversation.length && !loading && <div className="grid min-h-[330px] place-items-center text-center text-sm text-muted-foreground">Start a six-turn simulation using the two reviewed snapshots and server-side credentials.</div>}{loading && <div className="grid min-h-[330px] place-items-center text-center text-sm text-muted-foreground"><span className="animate-pulse">The agents are getting acquainted, then reflecting on the exchange…</span></div>}{conversation.map((message, index) => <div key={`${message.from}-${index}`} className={`flex items-end gap-2 ${message.from === 'b' ? 'flex-row-reverse' : ''}`}><Avatar person={profiles[message.from]} size="sm" /><div className={`max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${message.from === 'a' ? 'rounded-bl-md bg-primary/10' : 'rounded-br-md bg-accent'}`}>{message.text}</div></div>)}{conversation.length > 0 && <section className="mt-8 border-t border-border pt-8"><div className="mx-auto max-w-lg text-center"><div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary"><Heart fill="currentColor" size={13} /> Conversation compatibility</div><p className="mt-3 text-sm leading-relaxed text-muted-foreground">Two independent AI perspectives on this single simulated exchange—not a prediction of real-world compatibility.</p></div>{verdicts && compatibilityScore !== null && <><div className="mx-auto mt-5 grid size-32 place-items-center rounded-full border-8 border-primary/15 bg-card text-center shadow-sm"><div><div className="text-4xl font-semibold tracking-[-.06em] text-primary">{compatibilityScore}</div><div className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">combined score</div></div></div><div className="mt-6 grid gap-4">{(['a', 'b'] as PersonKey[]).map(person => <VerdictCard key={person} person={profiles[person]} verdict={verdicts[person]} />)}</div></>}{verdictUnavailable && <p role="status" className="mt-6 rounded-2xl border border-border bg-card p-4 text-center text-sm text-muted-foreground">The conversation is ready, but the compatibility verdict was unavailable for this run. Run another simulation to try again.</p>}</section>}{error && <p role="alert" className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}</div><div className="flex justify-start border-t border-border px-5 py-4"><Button variant="secondary" onClick={startConversation} disabled={loading}>{loading ? 'Generating…' : conversation.length ? 'Run another simulation' : 'Start simulation'} {conversation.length ? <RefreshCw size={15} /> : <Sparkles size={15} />}</Button></div></div></div></main>
+  return <main className="min-h-screen bg-background"><header className="mx-auto flex max-w-6xl items-center justify-between px-5 py-6 sm:px-8"><button onClick={back} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ChevronLeft size={17} /> Profiles</button><Logo /><Stepper step="date" /></header><div className="mx-auto max-w-3xl px-5 pb-12 sm:px-8"><div className="mb-7 text-center"><p className="text-xs font-semibold uppercase tracking-[.18em] text-primary">The first conversation</p><h1 className="mt-2 text-4xl font-semibold tracking-tight">Let&apos;s see how they talk.</h1><p className="mt-2 text-muted-foreground">A private, AI-to-AI simulation. The reviewed persona snapshots are stored in MongoDB; conversation messages are generated for this run.</p></div><div className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm"><div className="flex items-center justify-between border-b border-border px-5 py-4"><div className="flex items-center gap-3"><Avatar person={profiles.a} size="sm" /><div className="text-xs"><b>{profiles.a.name}&apos;s agent</b><span className="mx-2 text-muted-foreground">&amp;</span><b>{profiles.b.name}&apos;s agent</b></div></div><span className="text-xs text-muted-foreground">{conversation.length} / 6 turns</span></div><div aria-live="polite" className="min-h-[390px] space-y-4 bg-gradient-to-b from-muted/35 to-background p-5 sm:p-8">{!conversation.length && !loading && <div className="grid min-h-[330px] place-items-center text-center text-sm text-muted-foreground">Start a six-turn simulation using the two reviewed snapshots and server-side credentials.</div>}{loading && <div className="grid min-h-[330px] place-items-center text-center text-sm text-muted-foreground"><span className="animate-pulse">The agents are getting acquainted, then reflecting on the exchange…</span></div>}{conversation.map((message, index) => <div key={`${message.from}-${index}`} className={`flex items-end gap-2 ${message.from === 'b' ? 'flex-row-reverse' : ''}`}><Avatar person={profiles[message.from]} size="sm" /><div className={`max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${message.from === 'a' ? 'rounded-bl-md bg-primary/10' : 'rounded-br-md bg-accent'}`}>{message.text}</div></div>)}{conversation.length > 0 && <section className="mt-8 border-t border-border pt-8"><div className="mx-auto max-w-lg text-center"><div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary"><Heart fill="currentColor" size={13} /> Conversation compatibility</div><p className="mt-3 text-sm leading-relaxed text-muted-foreground">Two independent AI perspectives on this single simulated exchange—not a prediction of real-world compatibility.</p></div>{verdicts && compatibilityScore !== null && <><div className="mx-auto mt-5 grid size-32 place-items-center rounded-full border-8 border-primary/15 bg-card text-center shadow-sm"><div><div className="text-4xl font-semibold tracking-[-.06em] text-primary">{compatibilityScore}</div><div className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">combined score</div></div></div><div className="mt-6 grid gap-4">{(['a', 'b'] as PersonKey[]).map(person => <VerdictCard key={person} person={profiles[person]} verdict={verdicts[person]} />)}</div></>}{verdictUnavailable && <p role="status" className="mt-6 rounded-2xl border border-border bg-card p-4 text-center text-sm text-muted-foreground">The conversation is ready, but the compatibility verdict was unavailable for this run. Run another simulation to try again.</p>}</section>}{error && <p role="alert" className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}</div><div className="flex justify-start border-t border-border px-5 py-4"><Button variant="secondary" onClick={startConversation} disabled={loading}>{loading ? 'Generating…' : conversation.length ? 'Run another simulation' : 'Start simulation'} {conversation.length ? <RefreshCw size={15} /> : <Sparkles size={15} />}</Button></div></div></div></main>
 }
 
 export default function AIMatchmaker() {
   const [step, setStep] = useState<Step>('landing')
   const [profiles, setProfiles] = useState<Record<PersonKey, Persona>>(starterPersonas)
-  const saveProfile = (user: PersonKey) => (persona: Persona) => {
+  const [userIds, setUserIds] = useState<Partial<Record<PersonKey, string>>>({})
+  const saveProfile = (user: PersonKey) => (persona: Persona, _userId: string) => {
     setProfiles(current => ({ ...current, [user]: persona }))
+    setUserIds(current => ({ ...current, [user]: _userId }))
     setStep(user === 'a' ? 'profile-b' : 'date')
   }
+  const rememberUserId = (user: PersonKey) => (userId: string) => {
+    setUserIds(current => ({ ...current, [user]: userId }))
+  }
   if (step === 'landing') return <Landing start={() => setStep('profile-a')} />
-  if (step === 'profile-a') return <Profile user="a" initial={profiles.a} next={saveProfile('a')} back={() => setStep('landing')} />
-  if (step === 'profile-b') return <Profile user="b" initial={profiles.b} next={saveProfile('b')} back={() => setStep('profile-a')} />
+  if (step === 'profile-a') return <Profile key="profile-a" user="a" initial={profiles.a} initialUserId={userIds.a} next={saveProfile('a')} onUserId={rememberUserId('a')} back={() => setStep('landing')} />
+  if (step === 'profile-b') return <Profile key="profile-b" user="b" initial={profiles.b} initialUserId={userIds.b} next={saveProfile('b')} onUserId={rememberUserId('b')} back={() => setStep('profile-a')} />
   return <DateView profiles={profiles} back={() => setStep('profile-b')} />
 }
 
