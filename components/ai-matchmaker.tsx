@@ -123,10 +123,6 @@ function Profile({ user, initial, initialUserId, next, onUserId, back }: { user:
   }
 
   const savePersona = async () => {
-    if (linksNeedImport) {
-      setSaveError('Store the entered social links first so this persona uses the same canonical user record.')
-      return
-    }
     setSaving(true)
     setSaveError('')
     try {
@@ -147,7 +143,7 @@ function Profile({ user, initial, initialUserId, next, onUserId, back }: { user:
     }
   }
 
-  const canSave = isValid && !saving && !linksNeedImport
+  const canSave = isValid && !saving
 
   return (
     <main className="min-h-screen bg-background">
@@ -199,7 +195,7 @@ function Profile({ user, initial, initialUserId, next, onUserId, back }: { user:
               <label htmlFor={`style-${user}`}><span className="text-sm font-semibold">Conversation style</span><span className="mt-1 block text-xs text-muted-foreground">Describe tone, pacing, humor, and message length.</span><textarea id={`style-${user}`} required maxLength={400} rows={3} value={persona.style} onChange={event => change('style', event.target.value)} className="mt-2 w-full resize-y rounded-xl border border-border bg-background p-3 text-sm outline-none ring-primary focus:ring-2" /></label>
             </div>
             {saveError && <p role="alert" className="mt-5 rounded-xl bg-destructive/10 p-3 text-xs leading-relaxed text-destructive">{saveError}</p>}
-            {linksNeedImport && <p className="mt-5 rounded-xl bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-700 dark:text-amber-300">Store the entered social links first. This keeps the imported profiles and this persona on one user record.</p>}
+            {linksNeedImport && <p className="mt-5 rounded-xl bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-700 dark:text-amber-300">Social links are entered but not imported yet. You can save this persona now; use Store social data to attach them to the same user record later.</p>}
             <div className="mt-8 flex justify-end"><Button type="submit" disabled={!canSave}>{saving ? 'Saving persona…' : 'Save persona and continue'} <ArrowRight size={17} /></Button></div>
           </form>
           <ProfilePreview persona={persona} user={user} />
