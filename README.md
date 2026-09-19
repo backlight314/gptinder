@@ -26,9 +26,10 @@ PROFILE_IMPORT_MAX_POSTS="12"
 
 For Vercel, add the same values under Project Settings → Environment Variables.
 Use a MongoDB Atlas database user scoped to this application and allow network
-access from Vercel. The primary schema has six collections:
+access from Vercel. The primary schema has seven collections:
 
 - `users`: personalized string `_id` and display name
+- `personas`: user-authored name, bio, traits, interests, and conversation style, keyed by `userId` and slot (`a` or `b`)
 - `linkedin_profiles`: raw LinkedIn profile fields, including embedded profile sections
 - `instagram_profiles`: raw Instagram profile fields
 - `x_profiles`: raw X profile fields
@@ -39,6 +40,10 @@ The importer accepts Instagram person profiles, LinkedIn `/in/` person profiles,
 and X profile URLs. With `APIFY_TOKEN` configured, these imports do not depend
 on personal browser logins. Scraper/provider metadata is not written to the
 primary profile collections.
+
+The profile form saves its manual persona snapshot to `personas` before moving
+to the next step. Re-saving the same `userId` and slot updates the existing
+document and increments its revision; it does not create a duplicate.
 
 The one-time `npm run migrate:social-schema` command migrates the original
 schema without deleting it. Original documents and GridFS media are preserved

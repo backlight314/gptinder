@@ -38,6 +38,10 @@ export async function getMongoDatabase(): Promise<Db> {
         { displayName: 1 },
         { name: 'users_display_name' },
       ),
+      database.collection('personas').createIndex(
+        { userId: 1, slot: 1 },
+        { unique: true, name: 'persona_user_slot_unique' },
+      ),
       ...(['linkedin_profiles', 'instagram_profiles', 'x_profiles'] as const).map((name) =>
         database.collection(name).createIndex(
           { userId: 1 },
