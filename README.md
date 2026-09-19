@@ -1,6 +1,6 @@
 # AI Matchmaker
 
-Next.js + MongoDB Atlas + Vercel Workflows + server-side OpenAI, with a Lua Hacker Badge / Web Serial bridge.
+Next.js + MongoDB Atlas + Browserbase + Vercel Workflows + server-side OpenAI, with a Lua Hacker Badge / Web Serial bridge.
 
 Start with [Vercel, Atlas and demo setup](docs/SETUP.md) and [badge installation](docs/BADGE.md). Copy `.env.example` to `.env.local`, provide your credentials, then use Node.js 24 and pnpm 12.3.4:
 
@@ -11,7 +11,7 @@ pnpm db:check
 pnpm dev
 ```
 
-The app supports verified email sign-in/recovery, reviewed profiles, physical badge encounters, six-turn conversations, transparent scoring, and confirmed preference learning. The badge pair elects one delivery leader, so a bump produces one profile-import request through the connected browser bridge.
+Set `BROWSERBASE_API_KEY` and `BROWSERBASE_PROJECT_ID` to scrape the two public Instagram, LinkedIn, or X profiles received in a badge encounter. The badge pair elects one delivery leader, so one bump produces one profile-import request through the connected browser bridge.
 
 ```sh
 pnpm format:check
