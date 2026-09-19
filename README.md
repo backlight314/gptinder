@@ -61,10 +61,12 @@ credentials for the two already-populated persona Vector Stores:
 cp .env.example .env.local
 ```
 
-`OPENAI_API_KEY`, `OPENAI_VECTOR_STORE_ID_A`, and
-`OPENAI_VECTOR_STORE_ID_B` must remain in `.env.local`; they are never sent to
-the browser. The app does not create Vector Stores, upload persona material,
-or connect to a dating platform.
+`OPENAI_API_KEY` must remain in `.env.local`; it is never sent to the browser.
+The optional Vector Store IDs add approved reference material when configured.
+Imported social posts are read server-side from MongoDB as a compact voice
+reference: they calibrate tone and pacing, while the user-authored persona
+remains the source of truth for facts. The app does not create Vector Stores,
+upload persona material, or connect to a dating platform.
 
 First, run the development server:
 
