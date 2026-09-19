@@ -2,6 +2,53 @@
 
 The application code is on branch `jeremy`. Deployment and real badge testing still require your accounts and hardware. The two handoff guides are this file and [BADGE.md](./BADGE.md).
 
+## Fastest local test (no Atlas and no email provider)
+
+This starts a temporary MongoDB replica set and the Next.js app together. It supports transactions and is discarded when you press Ctrl+C.
+
+### Install the tools
+
+Install Node.js 24 from [nodejs.org](https://nodejs.org/en/download), then install pnpm:
+
+```powershell
+npm install --global pnpm@12.3.4
+```
+
+Install desktop Chrome or Edge for Web Serial. Open the badge IDE at [badge.hackthenorth.com/ide](https://badge.hackthenorth.com/ide/); it runs in the browser.
+
+### Start the temporary local app
+
+```powershell
+cd C:\HTN_prj\gptinder
+git switch jeremy
+pnpm install --frozen-lockfile
+Copy-Item .env.example .env.local
+notepad .env.local
+pnpm mock:dev
+```
+
+Set `OPENAI_API_KEY` and `OPENAI_MODEL` in `.env.local`. The mock command supplies MongoDB, authentication, localhost URL, and demo-key login automatically. The first run may download a MongoDB test binary. Open `http://localhost:3000` after Next.js reports it is ready. Press Ctrl+C to stop both the app and temporary database.
+
+### Local demo login
+
+1. Click **Get started**.
+2. Click **Use a demo sign-in key**.
+3. Enter a display name, confirm you are 18 or older, and create the account.
+4. Save the displayed private sign-in key.
+5. Repeat in separate Chrome/Edge profiles for other demo participants.
+
+`pnpm mock:dev` is the simplest local mode. It does not require Atlas or Resend. Real OpenAI credentials are still required for live AI questions and conversations; automated tests mock those calls.
+
+### Separate temporary database process
+
+If you need the database without Next.js, run this in one PowerShell window and leave it open:
+
+```powershell
+pnpm mock:db
+```
+
+It writes connection details to `.env.mock.local` and discards the database when stopped. `pnpm mock:dev` is preferred because it connects the app automatically.
+
 ## 1. Create the services
 
 1. Create a MongoDB Atlas replica-set cluster. Transactions are required; a standalone local MongoDB server is insufficient. Choose a region near Vercel's function region. This repository selects `iad1` (Northern Virginia) in `vercel.json`; change that if your Atlas cluster is elsewhere.

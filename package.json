@@ -29,6 +29,8 @@
     "db:indexes": "tsx --conditions=react-server scripts/database.ts indexes",
     "db:check": "tsx --conditions=react-server scripts/database.ts check",
     "ai:check": "tsx --conditions=react-server scripts/ai-check.ts",
+    "mock:db": "tsx --conditions=react-server scripts/mock-mongo.ts",
+    "mock:dev": "tsx --conditions=react-server scripts/mock-dev.ts",
     "demo:seed": "tsx --conditions=react-server scripts/database.ts seed",
     "format": "prettier --write app components lib workflows scripts tests docs *.json *.mjs *.ts",
     "format:check": "prettier --check app components lib workflows scripts tests docs *.json *.mjs *.ts"

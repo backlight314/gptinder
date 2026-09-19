@@ -4,6 +4,8 @@ Next.js + MongoDB Atlas + Vercel Workflows + server-side OpenAI, with a Lua Hack
 
 Start with [Vercel, Atlas and demo setup](docs/SETUP.md) and [badge installation](docs/BADGE.md). Copy `.env.example` to `.env.local`, provide your credentials, then use Node.js 24 and pnpm 12.3.4:
 
+For the simplest local test, configure `OPENAI_API_KEY` and run `pnpm mock:dev`; this starts a temporary transaction-capable MongoDB automatically and enables demo-key login. The full step-by-step setup is in [SETUP.md](docs/SETUP.md).
+
 ```sh
 pnpm install --frozen-lockfile
 pnpm db:indexes
