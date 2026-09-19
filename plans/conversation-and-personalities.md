@@ -16,10 +16,13 @@ send messages through any dating platform.
   real conversation.
 - A single server-side `OPENAI_API_KEY` powers both agents. It is never sent to
   the browser or stored in the database.
-- Each agent has its own already-populated OpenAI Vector Store of approved
-  persona material.
+- Imported public posts may provide a compact, server-side voice reference.
+  They calibrate tone and pacing only; the reviewed persona remains the source
+  of truth for facts.
+- Each agent may also have its own OpenAI Vector Store of approved persona
+  material.
 - The current MVP retains no conversation after its HTTP request completes;
-  persona material remains in its configured Vector Store.
+  imported social posts remain in MongoDB and are read as bounded references.
 
 ## Persona model
 
@@ -146,23 +149,27 @@ not an objective measure or real-world promise.
 
 1. The UI sends two persona snapshots and a turn count (six by default).
 2. The API accepts between two and ten turns.
-3. Before every turn, the API semantically searches the current speaker's
-   Vector Store using their profile and the live transcript.
-4. It passes the top three retrieved text chunks, the snapshot, and the
+3. Before every turn, the API loads the current speaker's recent imported
+   posts from MongoDB as a bounded voice-and-pacing reference. If configured,
+   it also semantically searches that speaker's Vector Store.
+4. It passes the bounded social samples, retrieved text chunks, snapshot, and
    transcript to that speaker's Responses API request.
 5. The prompt requires one respectful message of at most 35 words and forbids
    claims outside the snapshot or retrieved material.
 6. The transcript is returned as JSON and rendered by the date screen.
 7. After the final turn, the API returns both grounded assessments and a
-   server-calculated combined compatibility score as described above. If a
-   verdict cannot be produced, it still returns the transcript and marks the
-   verdict unavailable.
+   server-calculated combined compatibility score as described above. The
+   verdict rubric scores reciprocal substance and conversational fit, not
+   generic politeness or agreement, and requires at least one concrete
+   consideration. If a verdict cannot be produced, it still returns the
+   transcript and marks the verdict unavailable.
 
 ## Retrieval setup
 
-Persona documents are already indexed in two OpenAI Vector Stores: one for
-Agent A and one for Agent B. This application does not create stores or upload
-files. Add their existing IDs to the local ignored environment file:
+Persona documents may be indexed in two OpenAI Vector Stores: one for Agent A
+and one for Agent B. This application does not create stores or upload files.
+Social-post voice memory works without them; add existing IDs to the local
+ignored environment file when available:
 
 ```bash
 OPENAI_VECTOR_STORE_ID_A=vs_...

@@ -3,9 +3,8 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'AI Matchmaker — Find the spark before the first date',
-  description: 'Let your AI selves go on the first date. Discover compatibility before hello.',
-  generator: 'v0.app',
+  title: 'Hack the Heart — Universal badge directory',
+  description: 'Import official Hack the North Connect contacts into one shared public directory.',
   icons: {
     icon: [
       {

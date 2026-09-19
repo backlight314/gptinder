@@ -1,94 +1,61 @@
-# gptinder
+# Hack the Heart
 
-This is a [Next.js](https://nextjs.org) project bootstrapped with [v0](https://v0.app).
+Hack the Heart is a public directory built from official Hack the North Connect contacts. A participant can connect a compatible badge to desktop Chrome, Brave, or Edge, preview its owner and saved contacts, and explicitly import them into a shared MongoDB directory. No account or sign-in is required.
 
-## Built with v0
+## Badge import
 
-This repository is linked to a [v0](https://v0.app) project. You can continue developing by visiting the link below -- start new chats to make changes, and v0 will push commits directly to this repo. Every merge to `main` will automatically deploy.
+Open `/import` over HTTPS and connect the badge with a USB data cable. The browser requests the Espressif serial device (`VID 0x303A`, `PID 0x1001`) at 115200 baud and issues only these read commands:
 
-[Continue working on v0 →](https://v0.app/chat/projects/prj_x5RUpsvNaKjJVpiyoM6I9Qvh5g9a)
+```text
+cat /littlefs/identity.json
+ls /littlefs/config/contacts
+cat /littlefs/config/contacts/<validated-file>.cfg
+```
 
-## Public profile imports
+The importer drains boot output, handles fragmented serial reads, waits for the `badge>` prompt, retries one incomplete command, limits output, and releases all locks before closing the port. It never flashes, reboots, configures, or writes to the badge.
 
-The profile form uses Apify for LinkedIn, Instagram, and X. It captures profile fields, posts, comments/replies, and
-sections such as experience, education, certifications, projects, and skills,
-then stores queryable records plus the complete raw social data in MongoDB.
-Credentials never reach the browser client.
+After reading, `/api/airos/imports/preview` classifies each record as new, fills missing fields, unchanged, or conflicting. Nothing is uploaded until the user chooses **Import all**. Imports can fill empty fields but never replace a different established value. Re-importing the same badge ID does not create a second profile or directory card.
 
-Copy `.env.example` to `.env.local` and set:
+## Public product
 
-```bash
+- `/` — searchable, paginated badge directory
+- `/people/[badgeId]` — public profile with contact and social fields; requests `noindex`
+- `/import` — Web Serial preview/import workflow
+- `/lab` — the existing separate AI compatibility lab
+- `/airos` — redirects to `/`
+
+Email and phone are intentionally public in this product configuration. Profiles are labelled `badge imported`; stock badge records are not cryptographically signed.
+
+On a profile page, **Analyze profile** imports supported LinkedIn, Instagram, and X/Twitter data through the server-side Apify pipeline and produces a cached structured analysis through OpenAI. Scraped text is treated as untrusted reference material, sensitive traits are not inferred, and the profile remains available when enrichment fails.
+
+## Persistence
+
+The directory uses `airos_profiles`, `airos_connections`, `airos_profile_observations`, `airos_imports`, `airos_profile_analyses`, and TTL-backed `airos_rate_limits`. The retired `airos_registrations` data is not migrated or published.
+
+Copy `.env.example` to `.env.local` and configure server-only credentials:
+
+```dotenv
 MONGODB_URI="mongodb+srv://..."
 MONGODB_DB="gptinder"
+OPENAI_API_KEY="sk-..."
+OPENAI_MODEL_A="gpt-5.6-luna"
+OPENAI_MODEL_B="gpt-5.6-luna"
+AIROS_ANALYSIS_MODEL="gpt-5.6-luna"
 APIFY_TOKEN="apify_api_..."
-PROFILE_IMPORT_MAX_POSTS="12"
+AIROS_RATE_LIMIT_SALT="long-random-value"
 ```
 
-For Vercel, add the same values under Project Settings → Environment Variables.
-Use a MongoDB Atlas database user scoped to this application and allow network
-access from Vercel. The primary schema has seven collections:
-
-- `users`: personalized string `_id` and display name
-- `personas`: user-authored name, bio, traits, interests, and conversation style, keyed by `userId` and slot (`a` or `b`)
-- `linkedin_profiles`: raw LinkedIn profile fields, including embedded profile sections
-- `instagram_profiles`: raw Instagram profile fields
-- `x_profiles`: raw X profile fields
-- `social_posts`: posts from every platform with `userId`, `profileId`, and raw data
-- `social_comments`: comments/replies with `userId`, `profileId`, `postId`, and raw data
-
-The importer accepts Instagram person profiles, LinkedIn `/in/` person profiles,
-and X profile URLs. With `APIFY_TOKEN` configured, these imports do not depend
-on personal browser logins. Scraper/provider metadata is not written to the
-primary profile collections.
-
-The profile form stores entered social links first, then saves the manual
-persona snapshot using the returned canonical `userId`. Re-saving the same
-`userId` and slot updates the existing document and increments its revision;
-it does not create a duplicate. Exact external profile IDs also take priority
-over a stale UI `userId`, so a retry cannot move one social identity to a new
-user record.
-
-The one-time `npm run migrate:social-schema` command migrates the original
-schema without deleting it. Original documents and GridFS media are preserved
-under `legacy_*` collections.
-
-## Getting Started
-
-Create a local environment file from the example and fill in the server-only
-credentials for the two already-populated persona Vector Stores:
+## Development
 
 ```bash
-cp .env.example .env.local
-```
-
-`OPENAI_API_KEY`, `OPENAI_VECTOR_STORE_ID_A`, and
-`OPENAI_VECTOR_STORE_ID_B` must remain in `.env.local`; they are never sent to
-the browser. The app does not create Vector Stores, upload persona material,
-or connect to a dating platform.
-
-First, run the development server:
-
-```bash
-# This project uses the NVM default configured in ~/.zshrc (currently Node 22).
-nvm use default
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
 pnpm dev
+pnpm test:run
+pnpm typecheck
+pnpm build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-## Learn More
-
-To learn more, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-- [v0 Documentation](https://v0.app/docs) - learn about v0 and how to use it.
+Open [http://localhost:3000](http://localhost:3000). Web Serial works on localhost for development; deployment requires HTTPS.
 
 ## Discord data source
 
