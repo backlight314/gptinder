@@ -4,7 +4,8 @@ import './globals.css'
 
 export const metadata: Metadata = {
   title: 'AI Matchmaker — Find the spark before the first date',
-  description: 'Let your AI selves go on the first date. Discover compatibility before hello.',
+  description:
+    'Let your AI selves go on the first date. Discover compatibility before hello.',
   generator: 'v0.app',
   icons: {
     icon: [

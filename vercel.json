@@ -1,0 +1,8 @@
+{
+  "framework": "nextjs",
+  "regions": ["iad1"],
+  "crons": [{ "path": "/api/internal/recover", "schedule": "0 6 * * *" }],
+  "functions": {
+    "app/.well-known/workflow/v1/step/route.js": { "maxDuration": 60 }
+  }
+}

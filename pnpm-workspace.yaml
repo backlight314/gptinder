@@ -3,3 +3,15 @@ pmOnFail: ignore
 minimumReleaseAgeExclude:
   - '@next/*'
   - next
+
+overrides:
+  '@workflow/core>nanoid': '^5.1.16'
+  '@workflow/world-local>undici': '^7.29.0'
+  '@workflow/world-vercel>undici': '^7.29.0'
+
+allowBuilds:
+  '@swc/core': true
+  cbor-extract: false
+  esbuild: true
+  mongodb-memory-server: false
+  protobufjs: true
