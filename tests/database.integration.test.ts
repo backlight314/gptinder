@@ -190,6 +190,11 @@ beforeEach(async () => {
       _id: randomUUID(),
       userId: person.id,
       tokenHash: hashSecret(['a', 'b', 'c'][i].repeat(32)),
+      profileUrl: [
+        'https://www.linkedin.com/in/alex-demo/',
+        'https://www.linkedin.com/in/blair-demo/',
+        'https://www.linkedin.com/in/casey-demo/',
+      ][i],
       status: 'active',
       expiresAt: new Date(Date.now() + 60000),
       createdAt: new Date(),

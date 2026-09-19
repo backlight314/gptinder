@@ -15,7 +15,10 @@ export async function POST(request: Request) {
   try {
     if (!process.env.MONGODB_URI) {
       return Response.json(
-        { error: 'MongoDB is not configured yet. Add MONGODB_URI to the server environment.' },
+        {
+          error:
+            'MongoDB is not configured yet. Add MONGODB_URI to the server environment.',
+        },
         { status: 503 },
       )
     }
@@ -23,7 +26,10 @@ export async function POST(request: Request) {
     const body = requestSchema.safeParse(await request.json())
     if (!body.success) {
       return Response.json(
-        { error: 'Enter a supported profile and confirm you have permission to import it.' },
+        {
+          error:
+            'Enter a supported profile and confirm you have permission to import it.',
+        },
         { status: 400 },
       )
     }
@@ -52,7 +58,10 @@ export async function POST(request: Request) {
 
     console.error('Profile import failed', error)
     return Response.json(
-      { error: 'The profile could not be imported or stored. Check the server configuration and try again.' },
+      {
+        error:
+          'The profile could not be imported or stored. Check the server configuration and try again.',
+      },
       { status: 500 },
     )
   }

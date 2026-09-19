@@ -4,8 +4,9 @@ import { bumpSchema } from '@/lib/badge-protocol'
 import { createEncounter } from '@/lib/server/encounters'
 import { dispatchEncounter } from '@/lib/server/dispatch'
 import { collections } from '@/lib/server/db'
+import { importEncounterProfiles } from '@/lib/server/badge-profile-import'
 export const runtime = 'nodejs'
-export const maxDuration = 60
+export const maxDuration = 300
 export const POST = route(async (request) => {
   const user = await currentUser()
   await rateLimit(`encounter:${user._id}`, 20)
@@ -13,6 +14,7 @@ export const POST = route(async (request) => {
     user._id,
     await readJson(request, bumpSchema),
   )
+  await importEncounterProfiles(encounter)
   await dispatchEncounter(encounter._id)
   return { encounterId: encounter._id }
 }, true)

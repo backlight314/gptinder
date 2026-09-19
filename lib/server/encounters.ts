@@ -89,6 +89,7 @@ export async function createEncounter(
       participants.push({
         userId: id,
         name: user.displayName,
+        profileUrl: id === local.userId ? local.profileUrl : peer.profileUrl,
         profileVersionId: user.profileVersionId,
         preferenceVersionId: user.preferenceVersionId,
       })

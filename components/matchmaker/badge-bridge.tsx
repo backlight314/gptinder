@@ -9,7 +9,7 @@ import {
   type BumpEvent,
 } from '@/lib/badge-protocol'
 import type { MeResponse } from '@/lib/domain'
-import { api, Button, Card, ErrorNotice, errorMessage } from './ui'
+import { api, Button, Card, ErrorNotice, errorMessage, inputClass } from './ui'
 
 export function BadgeBridge({
   me,
@@ -23,6 +23,8 @@ export function BadgeBridge({
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [profileUrl, setProfileUrl] = useState('')
+  const [profileConsent, setProfileConsent] = useState(false)
   const [status, setStatus] = useState(
     'Connect a badge to hear its next hello.',
   )
@@ -174,7 +176,10 @@ export function BadgeBridge({
       const template = await response.text()
       if (!template.includes('__DEVICE_TOKEN__'))
         throw new Error('Invalid badge app template.')
-      const binding = await api<{ token: string }>('/api/badges', 'POST')
+      const binding = await api<{ token: string }>('/api/badges', 'POST', {
+        profileUrl,
+        consent: profileConsent,
+      })
       const blob = new Blob(
         [template.replace('__DEVICE_TOKEN__', binding.token)],
         { type: 'text/plain' },
@@ -201,10 +206,35 @@ export function BadgeBridge({
       <p className="mb-5 text-sm leading-relaxed text-muted-foreground">
         Download your paired app and install it through the Badge IDE. Close the
         IDE’s serial connection before connecting here. Each person needs their
-        own paired download.
+        own paired download and public profile link. After a bump, the badges
+        elect one sender; connect the badge whose screen says it was elected.
       </p>
+      <label className="mb-3 block text-sm">
+        Public Instagram, LinkedIn, or X profile
+        <input
+          className={`${inputClass} mt-1`}
+          type="url"
+          value={profileUrl}
+          maxLength={500}
+          onChange={(event) => setProfileUrl(event.target.value)}
+          placeholder="https://www.linkedin.com/in/name/"
+        />
+      </label>
+      <label className="mb-5 flex items-start gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={profileConsent}
+          onChange={(event) => setProfileConsent(event.target.checked)}
+        />
+        I own this profile or have permission to import and store its public
+        content when my badge meets another badge.
+      </label>
       <div className="flex flex-wrap gap-3">
-        <Button disabled={busy} variant="secondary" onClick={download}>
+        <Button
+          disabled={busy || !profileUrl.trim() || !profileConsent}
+          variant="secondary"
+          onClick={download}
+        >
           <Download size={16} />
           {busy ? 'Preparing…' : 'Download my badge app'}
         </Button>

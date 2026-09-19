@@ -44,7 +44,14 @@ export async function getMe(user: User): Promise<MeResponse> {
             status: 'active',
             expiresAt: { $gt: new Date() },
           },
-          { projection: { _id: 1, expiresAt: 1, status: 1 } },
+          {
+            projection: {
+              _id: 1,
+              expiresAt: 1,
+              status: 1,
+              profileUrl: 1,
+            },
+          },
         )
         .toArray(),
       user.styleVersionId

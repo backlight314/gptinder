@@ -83,6 +83,15 @@ describe('badge bridge protocol', () => {
     expect(
       bumpSchema.safeParse({ ...bump, peerToken: bump.localToken }).success,
     ).toBe(false)
+    expect(
+      bumpSchema.safeParse({
+        ...bump,
+        localToken: bump.peerToken,
+        peerToken: bump.localToken,
+        localNonce: bump.peerNonce,
+        peerNonce: bump.localNonce,
+      }).success,
+    ).toBe(false)
     expect(parseBadgeLine('GPTINDER:{oops}')).toBeNull()
     const lines = new SerialLines()
     expect(lines.push('x'.repeat(10000))).toEqual([])

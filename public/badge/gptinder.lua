@@ -10,11 +10,11 @@ version=1.0.0
 
 -- Download a personalized copy in the web app. Never put account/API keys here.
 -- A arms; gently tap both badges; A again is a sensor fallback.
--- B replays the last USB event. DOWN cycles LED brightness. HOME exits.
+-- The two badges elect one sender. B replays only on that elected badge.
 local TOKEN = "__DEVICE_TOKEN__"
 local PREFIX = "GT1"
 local MIN_RSSI = -65
-local enabled, armed, pairing, paired = false, false, false, false
+local enabled, armed, pairing, paired, elected = false, false, false, false, false
 local arm_until, pair_until, next_send, next_led, next_replay = 0, 0, 0, 0, 0
 local nonce, peer_token, peer_nonce, peer_mac = "", "", "", ""
 local last, pending_save, brightness = "", false, 180
@@ -43,6 +43,10 @@ local function emit_last()
     detail:set_text("No saved encounter on this badge")
     return
   end
+  if TOKEN >= last:sub(33, 64) then
+    detail:set_text("Peer badge elected - no API event here")
+    return
+  end
   badge.sys.log('GPTINDER:{"type":"gptinder.encounter","version":1,"localToken":"' ..
     TOKEN .. '","peerToken":"' .. last:sub(33, 64) .. '","localNonce":"' ..
     last:sub(65, 80) .. '","peerNonce":"' .. last:sub(81, 96) .. '"}')
@@ -51,7 +55,7 @@ end
 
 local function begin_pair()
   if not enabled or not armed then return end
-  armed, pairing, paired = false, true, false
+  armed, pairing, paired, elected = false, true, false, false
   nonce, peer_token, peer_nonce, peer_mac = new_nonce(), "", "", ""
   pair_until, next_send = badge.sys.ms() + 8000, 0
   status:set_text("Finding a nearby hello...")
@@ -73,9 +77,15 @@ local function receive(mac, rssi, payload)
   if kind == "A" and not paired then
     paired = true
     last = TOKEN .. hex(peer_token) .. hex(nonce) .. hex(peer_nonce)
+    elected = TOKEN < hex(peer_token)
     pending_save = true
-    status:set_text("Badge handshake confirmed")
-    detail:set_text("Saving encounter for USB replay...")
+    if elected then
+      status:set_text("Elected API sender")
+      detail:set_text("Saving one encounter for USB delivery...")
+    else
+      status:set_text("Peer badge elected")
+      detail:set_text("This badge will not send an API event")
+    end
     -- Continue ACK retransmission until the original window ends.
   end
 end
@@ -96,7 +106,7 @@ function on_enter(root)
   detail:set_size(296, 56)
   detail:style({text_align = "center", text_font = 14})
   detail:align("top_mid", 0, 105)
-  hint = badge.ui.label(root, "A arm / fallback   B replay USB\nDOWN lights   HOME exit")
+  hint = badge.ui.label(root, "A arm / fallback   B replay if elected\nDOWN lights   HOME exit")
   hint:style({text_align = "center", text_font = 14})
   hint:align("bottom_mid", 0, -12)
   if not valid_token(TOKEN) then

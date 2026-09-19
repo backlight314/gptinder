@@ -47,12 +47,14 @@ for step = 1, 100 do
   end
 end
 assert(max_packet == 36, 'ACK packets must be 36 bytes')
-assert(#a.logs == 1 and #b.logs == 1, 'Each badge emits exactly one confirmed event')
+assert(#a.logs == 1 and #b.logs == 0, 'Only the elected badge emits an event')
 assert(a.logs[1]:find('"localToken":"' .. string.rep('a', 32) .. '"', 1, true))
 assert(a.logs[1]:find('"peerToken":"' .. string.rep('b', 32) .. '"', 1, true))
 assert(#a.store.last_encounter == 96)
 now = now + 2000; a.env.on_button(2, 1)
 assert(#a.logs == 2 and a.logs[1] == a.logs[2], 'B must replay the same nonces')
+b.env.on_button(2, 1)
+assert(#b.logs == 0, 'The non-elected badge must never emit an API event')
 a.env.on_button(3, 1); a.env.on_tick()
 a.env.on_exit(); b.env.on_exit()
 assert(a.disabled and b.disabled and a.receive == nil and b.receive == nil)

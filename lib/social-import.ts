@@ -67,7 +67,10 @@ export function parsePublicProfile(input: string): {
   sourceUrl: string
 } {
   const trimmed = input.trim()
-  if (!trimmed) throw new SocialImportError('Enter an Instagram, LinkedIn, or X profile URL.')
+  if (!trimmed)
+    throw new SocialImportError(
+      'Enter an Instagram, LinkedIn, or X profile URL.',
+    )
 
   if (/^@[A-Za-z0-9._]{1,30}$/.test(trimmed)) {
     const handle = trimmed.slice(1)
@@ -80,7 +83,9 @@ export function parsePublicProfile(input: string): {
 
   let url: URL
   try {
-    url = new URL(/^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`)
+    url = new URL(
+      /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`,
+    )
   } catch {
     throw new SocialImportError('That profile URL is not valid.')
   }
@@ -90,9 +95,22 @@ export function parsePublicProfile(input: string): {
 
   if (hostname === 'instagram.com') {
     const handle = pathSegments[0]
-    const reserved = new Set(['p', 'reel', 'reels', 'stories', 'explore', 'accounts'])
-    if (!handle || reserved.has(handle.toLowerCase()) || !/^[A-Za-z0-9._]{1,30}$/.test(handle)) {
-      throw new SocialImportError('Use a public Instagram profile URL, not a post or reel URL.')
+    const reserved = new Set([
+      'p',
+      'reel',
+      'reels',
+      'stories',
+      'explore',
+      'accounts',
+    ])
+    if (
+      !handle ||
+      reserved.has(handle.toLowerCase()) ||
+      !/^[A-Za-z0-9._]{1,30}$/.test(handle)
+    ) {
+      throw new SocialImportError(
+        'Use a public Instagram profile URL, not a post or reel URL.',
+      )
     }
 
     return {
@@ -104,7 +122,9 @@ export function parsePublicProfile(input: string): {
 
   if (hostname === 'linkedin.com') {
     if (pathSegments[0]?.toLowerCase() !== 'in' || !pathSegments[1]) {
-      throw new SocialImportError('Use a public LinkedIn person URL such as linkedin.com/in/name.')
+      throw new SocialImportError(
+        'Use a public LinkedIn person URL such as linkedin.com/in/name.',
+      )
     }
 
     const handle = pathSegments[1]
@@ -117,9 +137,23 @@ export function parsePublicProfile(input: string): {
 
   if (hostname === 'x.com' || hostname === 'twitter.com') {
     const handle = pathSegments[0]
-    const reserved = new Set(['home', 'explore', 'search', 'i', 'settings', 'notifications', 'messages'])
-    if (!handle || reserved.has(handle.toLowerCase()) || !/^[A-Za-z0-9_]{1,15}$/.test(handle)) {
-      throw new SocialImportError('Use a public X profile URL such as x.com/handle.')
+    const reserved = new Set([
+      'home',
+      'explore',
+      'search',
+      'i',
+      'settings',
+      'notifications',
+      'messages',
+    ])
+    if (
+      !handle ||
+      reserved.has(handle.toLowerCase()) ||
+      !/^[A-Za-z0-9_]{1,15}$/.test(handle)
+    ) {
+      throw new SocialImportError(
+        'Use a public X profile URL such as x.com/handle.',
+      )
     }
 
     return {
@@ -129,12 +163,19 @@ export function parsePublicProfile(input: string): {
     }
   }
 
-  throw new SocialImportError('Only public Instagram, LinkedIn, and X person profiles are supported.')
+  throw new SocialImportError(
+    'Only public Instagram, LinkedIn, and X person profiles are supported.',
+  )
 }
 
 function postLimit() {
-  const configured = Number.parseInt(process.env.PROFILE_IMPORT_MAX_POSTS || '12', 10)
-  return Number.isFinite(configured) ? Math.min(Math.max(configured, 1), 30) : 12
+  const configured = Number.parseInt(
+    process.env.PROFILE_IMPORT_MAX_POSTS || '12',
+    10,
+  )
+  return Number.isFinite(configured)
+    ? Math.min(Math.max(configured, 1), 30)
+    : 12
 }
 
 function allowedDomains(platform: SocialPlatform) {
@@ -144,8 +185,10 @@ function allowedDomains(platform: SocialPlatform) {
 }
 
 function contextIdFor(platform: SocialPlatform) {
-  if (platform === 'linkedin') return process.env.BROWSERBASE_LINKEDIN_CONTEXT_ID
-  if (platform === 'instagram') return process.env.BROWSERBASE_INSTAGRAM_CONTEXT_ID
+  if (platform === 'linkedin')
+    return process.env.BROWSERBASE_LINKEDIN_CONTEXT_ID
+  if (platform === 'instagram')
+    return process.env.BROWSERBASE_INSTAGRAM_CONTEXT_ID
   return process.env.BROWSERBASE_X_CONTEXT_ID
 }
 
@@ -157,13 +200,18 @@ async function scrollPage(page: Page, rounds = 5) {
 }
 
 async function expandVisibleComments(page: Page) {
-  const pattern = /(view|show|load)\s+(all\s+)?(more\s+|previous\s+)?(comments?|replies)|more replies/i
+  const pattern =
+    /(view|show|load)\s+(all\s+)?(more\s+|previous\s+)?(comments?|replies)|more replies/i
   for (let round = 0; round < 4; round += 1) {
     const controls = await page.locator('button, [role="button"]').all()
     let clicked = 0
     for (const control of controls.slice(0, 250)) {
       const label = await control.innerText().catch(() => '')
-      if (!pattern.test(label) || !await control.isVisible().catch(() => false)) continue
+      if (
+        !pattern.test(label) ||
+        !(await control.isVisible().catch(() => false))
+      )
+        continue
       await control.click({ timeout: 2_000 }).catch(() => undefined)
       clicked += 1
       if (clicked >= 8) break
@@ -186,15 +234,22 @@ async function capturePage(
     await scrollPage(page, scrollRounds)
     if (expandComments) await expandVisibleComments(page)
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'unknown navigation error'
-    throw new SocialImportError(`Browserbase could not open ${new URL(url).hostname}: ${message}`, 502)
+    const message =
+      error instanceof Error ? error.message : 'unknown navigation error'
+    throw new SocialImportError(
+      `Browserbase could not open ${new URL(url).hostname}: ${message}`,
+      502,
+    )
   }
 
   return page.evaluate(() => {
     const content = (selector: string) =>
       document.querySelector(selector)?.getAttribute('content')?.trim() || ''
-    const clean = (value: string | null | undefined) => (value || '').replace(/\s+/g, ' ').trim()
-    const jsonLd = Array.from(document.querySelectorAll('script[type="application/ld+json"]'))
+    const clean = (value: string | null | undefined) =>
+      (value || '').replace(/\s+/g, ' ').trim()
+    const jsonLd = Array.from(
+      document.querySelectorAll('script[type="application/ld+json"]'),
+    )
       .map((node) => {
         try {
           return JSON.parse(node.textContent || '') as unknown
@@ -203,7 +258,9 @@ async function capturePage(
         }
       })
       .filter((value) => value !== null)
-    const links = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href]'))
+    const links = Array.from(
+      document.querySelectorAll<HTMLAnchorElement>('a[href]'),
+    )
       .map((anchor) => ({ url: anchor.href, text: clean(anchor.innerText) }))
       .filter((link) => link.url.startsWith('http'))
       .slice(0, 2_000)
@@ -212,51 +269,79 @@ async function capturePage(
       .filter(Boolean)
       .slice(0, 100)
     const hostname = location.hostname.replace(/^www\./, '')
-    const commentSelectors = hostname === 'x.com' || hostname === 'twitter.com'
-      ? 'article'
-      : hostname === 'linkedin.com'
-        ? '[class*="comments-comment-item"], [data-test-id*="comment"]'
-        : 'article ul ul li, main ul ul li'
+    const commentSelectors =
+      hostname === 'x.com' || hostname === 'twitter.com'
+        ? 'article'
+        : hostname === 'linkedin.com'
+          ? '[class*="comments-comment-item"], [data-test-id*="comment"]'
+          : 'article ul ul li, main ul ul li'
     const commentTexts = Array.from(document.querySelectorAll(commentSelectors))
       .map((node) => clean((node as HTMLElement).innerText))
-      .filter((value, index) => value.length > 1 && (hostname !== 'x.com' && hostname !== 'twitter.com' || index > 0))
+      .filter(
+        (value, index) =>
+          value.length > 1 &&
+          ((hostname !== 'x.com' && hostname !== 'twitter.com') || index > 0),
+      )
       .filter((value, index, values) => values.indexOf(value) === index)
       .slice(0, 500)
-    const sections = Array.from(document.querySelectorAll<HTMLElement>('main section, main [data-view-name="profile-card"]'))
+    const sections = Array.from(
+      document.querySelectorAll<HTMLElement>(
+        'main section, main [data-view-name="profile-card"]',
+      ),
+    )
       .map((section, position) => ({
         heading: clean(section.querySelector('h2, h3')?.textContent),
         text: clean(section.innerText),
         position,
       }))
       .filter((section) => section.text.length > 2)
-      .filter((section, index, values) => values.findIndex((candidate) => candidate.text === section.text) === index)
+      .filter(
+        (section, index, values) =>
+          values.findIndex((candidate) => candidate.text === section.text) ===
+          index,
+      )
       .slice(0, 100)
     const time = document.querySelector<HTMLTimeElement>('time[datetime]')
     const main = document.querySelector<HTMLElement>('main')
-    const linkedInName = hostname === 'linkedin.com'
-      ? clean(document.querySelector('main h1')?.textContent)
-      : ''
-    const linkedInHeadline = hostname === 'linkedin.com'
-      ? clean(document.querySelector<HTMLElement>('main .text-body-medium.break-words')?.innerText)
-      : ''
-    const linkedInLocation = hostname === 'linkedin.com'
-      ? clean(document.querySelector<HTMLElement>('main .text-body-small.inline.t-black--light.break-words')?.innerText)
-      : ''
-    const linkedInAvatar = hostname === 'linkedin.com'
-      ? document.querySelector<HTMLImageElement>(
-        'main img.pv-top-card-profile-picture__image--show, main img.pv-top-card-profile-picture__image, main img.profile-photo-edit__preview',
-      )?.src || null
-      : null
-    const linkedInCover = hostname === 'linkedin.com'
-      ? document.querySelector<HTMLImageElement>(
-        'main img.profile-background-image__image, main .profile-background-image img',
-      )?.src || null
-      : null
+    const linkedInName =
+      hostname === 'linkedin.com'
+        ? clean(document.querySelector('main h1')?.textContent)
+        : ''
+    const linkedInHeadline =
+      hostname === 'linkedin.com'
+        ? clean(
+            document.querySelector<HTMLElement>(
+              'main .text-body-medium.break-words',
+            )?.innerText,
+          )
+        : ''
+    const linkedInLocation =
+      hostname === 'linkedin.com'
+        ? clean(
+            document.querySelector<HTMLElement>(
+              'main .text-body-small.inline.t-black--light.break-words',
+            )?.innerText,
+          )
+        : ''
+    const linkedInAvatar =
+      hostname === 'linkedin.com'
+        ? document.querySelector<HTMLImageElement>(
+            'main img.pv-top-card-profile-picture__image--show, main img.pv-top-card-profile-picture__image, main img.profile-photo-edit__preview',
+          )?.src || null
+        : null
+    const linkedInCover =
+      hostname === 'linkedin.com'
+        ? document.querySelector<HTMLImageElement>(
+            'main img.profile-background-image__image, main .profile-background-image img',
+          )?.src || null
+        : null
 
     return {
       url: location.href,
       title: clean(document.title),
-      description: content('meta[property="og:description"]') || content('meta[name="description"]'),
+      description:
+        content('meta[property="og:description"]') ||
+        content('meta[name="description"]'),
       imageUrl: content('meta[property="og:image"]') || null,
       heading: clean(document.querySelector('h1')?.textContent),
       mainText: clean(main?.innerText).slice(0, 120_000),
@@ -279,16 +364,20 @@ async function capturePage(
   })
 }
 
-function assertUsableSnapshot(platform: SocialPlatform, snapshot: PageSnapshot) {
+function assertUsableSnapshot(
+  platform: SocialPlatform,
+  snapshot: PageSnapshot,
+) {
   const url = snapshot.url.toLowerCase()
   const title = snapshot.title.toLowerCase()
   const text = snapshot.visibleText.toLowerCase()
 
   if (platform === 'linkedin') {
-    const loginWall = /\/(login|signup|authwall|checkpoint)(\/|\?|$)/.test(url)
-      || title === 'join linkedin'
-      || text.includes('by clicking agree & join')
-      || text.includes('new to linkedin? join now')
+    const loginWall =
+      /\/(login|signup|authwall|checkpoint)(\/|\?|$)/.test(url) ||
+      title === 'join linkedin' ||
+      text.includes('by clicking agree & join') ||
+      text.includes('new to linkedin? join now')
     if (loginWall) {
       throw new SocialImportError(
         'LinkedIn returned a login wall. Authenticate the configured Browserbase LinkedIn context, then retry.',
@@ -297,14 +386,21 @@ function assertUsableSnapshot(platform: SocialPlatform, snapshot: PageSnapshot) 
     }
   }
 
-  if (platform === 'instagram' && (/\/accounts\/login/.test(url) || text.includes('log in to see photos and videos'))) {
+  if (
+    platform === 'instagram' &&
+    (/\/accounts\/login/.test(url) ||
+      text.includes('log in to see photos and videos'))
+  ) {
     throw new SocialImportError(
       'Instagram returned a login wall. Authenticate the configured Browserbase Instagram context, then retry.',
       409,
     )
   }
 
-  if (platform === 'x' && (/\/i\/flow\/login/.test(url) || text.includes('sign in to x'))) {
+  if (
+    platform === 'x' &&
+    (/\/i\/flow\/login/.test(url) || text.includes('sign in to x'))
+  ) {
     throw new SocialImportError(
       'X returned a login wall. Authenticate the configured Browserbase X context, then retry.',
       409,
@@ -312,17 +408,32 @@ function assertUsableSnapshot(platform: SocialPlatform, snapshot: PageSnapshot) 
   }
 
   if (snapshot.mainText.length < 40) {
-    throw new SocialImportError('The profile page did not expose enough content to import safely.', 422)
+    throw new SocialImportError(
+      'The profile page did not expose enough content to import safely.',
+      422,
+    )
   }
 }
 
-const linkedInDetailRoutes: Array<{ path: string; kind: string; heading: string }> = [
+const linkedInDetailRoutes: Array<{
+  path: string
+  kind: string
+  heading: string
+}> = [
   { path: 'experience', kind: 'experience', heading: 'Experience' },
   { path: 'education', kind: 'education', heading: 'Education' },
-  { path: 'certifications', kind: 'certification', heading: 'Licenses & certifications' },
+  {
+    path: 'certifications',
+    kind: 'certification',
+    heading: 'Licenses & certifications',
+  },
   { path: 'projects', kind: 'project', heading: 'Projects' },
   { path: 'skills', kind: 'skills', heading: 'Skills' },
-  { path: 'volunteering-experiences', kind: 'volunteering', heading: 'Volunteering' },
+  {
+    path: 'volunteering-experiences',
+    kind: 'volunteering',
+    heading: 'Volunteering',
+  },
   { path: 'honors', kind: 'honors', heading: 'Honors & awards' },
 ]
 
@@ -336,28 +447,45 @@ async function captureLinkedInDetails(page: Page, handle: string) {
         4,
       )
       assertUsableSnapshot('linkedin', snapshot)
-      if (/page not found|this page doesn.t exist/i.test(snapshot.mainText)) continue
+      if (/page not found|this page doesn.t exist/i.test(snapshot.mainText))
+        continue
       if (snapshot.mainText.length < 80) continue
       details.push({ kind: route.kind, heading: route.heading, snapshot })
     } catch (error) {
-      if (error instanceof SocialImportError && error.status === 409) throw error
+      if (error instanceof SocialImportError && error.status === 409)
+        throw error
       // LinkedIn omits detail routes when a profile has no entries of that kind.
     }
   }
   return details
 }
 
-function canonicalPostUrl(rawUrl: string, platform: SocialPlatform): string | null {
+function canonicalPostUrl(
+  rawUrl: string,
+  platform: SocialPlatform,
+): string | null {
   try {
     const url = new URL(rawUrl)
     const hostname = url.hostname.toLowerCase().replace(/^www\./, '')
 
     if (platform === 'instagram') {
-      if (hostname !== 'instagram.com' || !/^\/(p|reel)\/[A-Za-z0-9_-]+\/?$/.test(url.pathname)) return null
+      if (
+        hostname !== 'instagram.com' ||
+        !/^\/(p|reel)\/[A-Za-z0-9_-]+\/?$/.test(url.pathname)
+      )
+        return null
     } else if (platform === 'linkedin') {
-      if (hostname !== 'linkedin.com' || !/(\/posts\/|\/feed\/update\/|\/pulse\/)/.test(url.pathname)) return null
+      if (
+        hostname !== 'linkedin.com' ||
+        !/(\/posts\/|\/feed\/update\/|\/pulse\/)/.test(url.pathname)
+      )
+        return null
     } else {
-      if (!['x.com', 'twitter.com'].includes(hostname) || !/^\/[^/]+\/status\/\d+/.test(url.pathname)) return null
+      if (
+        !['x.com', 'twitter.com'].includes(hostname) ||
+        !/^\/[^/]+\/status\/\d+/.test(url.pathname)
+      )
+        return null
       url.hostname = 'x.com'
     }
 
@@ -377,7 +505,11 @@ function discoverPostUrls(snapshot: PageSnapshot, platform: SocialPlatform) {
 }
 
 function cleanProfileName(snapshot: PageSnapshot, handle: string) {
-  if (snapshot.heading && snapshot.heading.toLowerCase() !== handle.toLowerCase()) return snapshot.heading
+  if (
+    snapshot.heading &&
+    snapshot.heading.toLowerCase() !== handle.toLowerCase()
+  )
+    return snapshot.heading
   const title = snapshot.title
     .replace(/\s*[|/]\s*(LinkedIn|X|Twitter).*$/i, '')
     .replace(/\s*\(@[^)]+\).*$/i, '')
@@ -387,16 +519,19 @@ function cleanProfileName(snapshot: PageSnapshot, handle: string) {
 }
 
 function metric(description: string, label: string): number | null {
-  const match = description.match(new RegExp(`([\\d,.]+)\\+?\\s*([KMB])?\\s+${label}`, 'i'))
+  const match = description.match(
+    new RegExp(`([\\d,.]+)\\+?\\s*([KMB])?\\s+${label}`, 'i'),
+  )
   if (!match) return null
   const value = Number.parseFloat(match[1].replace(/,/g, ''))
-  const multiplier = match[2]?.toUpperCase() === 'K'
-    ? 1_000
-    : match[2]?.toUpperCase() === 'M'
-      ? 1_000_000
-      : match[2]?.toUpperCase() === 'B'
-        ? 1_000_000_000
-        : 1
+  const multiplier =
+    match[2]?.toUpperCase() === 'K'
+      ? 1_000
+      : match[2]?.toUpperCase() === 'M'
+        ? 1_000_000
+        : match[2]?.toUpperCase() === 'B'
+          ? 1_000_000_000
+          : 1
   return Number.isFinite(value) ? Math.round(value * multiplier) : null
 }
 
@@ -406,10 +541,13 @@ function normalizeProfile(
   sourceUrl: string,
   snapshot: PageSnapshot,
 ): NormalizedSocialProfile {
-  const aboutSection = snapshot.sections.find((section) => /^about$/i.test(section.heading))
-  const description = aboutSection?.text.replace(/^about\s*/i, '').trim()
-    || snapshot.description
-    || snapshot.mainText.slice(0, 1_500)
+  const aboutSection = snapshot.sections.find((section) =>
+    /^about$/i.test(section.heading),
+  )
+  const description =
+    aboutSection?.text.replace(/^about\s*/i, '').trim() ||
+    snapshot.description ||
+    snapshot.mainText.slice(0, 1_500)
   const isLinkedIn = platform === 'linkedin'
   return {
     platform,
@@ -418,7 +556,9 @@ function normalizeProfile(
     name: snapshot.profileFacts.name || cleanProfileName(snapshot, handle),
     headline: snapshot.profileFacts.headline || null,
     bio: description,
-    avatarUrl: snapshot.profileFacts.avatarUrl || (isLinkedIn ? null : snapshot.imageUrl),
+    avatarUrl:
+      snapshot.profileFacts.avatarUrl ||
+      (isLinkedIn ? null : snapshot.imageUrl),
     coverImageUrl: snapshot.profileFacts.coverImageUrl,
     location: snapshot.profileFacts.location || null,
     followerCount: metric(snapshot.visibleText, 'followers'),
@@ -429,22 +569,33 @@ function normalizeProfile(
   }
 }
 
-function postFromSnapshot(snapshot: PageSnapshot, platform: SocialPlatform): NormalizedSocialPost {
+function postFromSnapshot(
+  snapshot: PageSnapshot,
+  platform: SocialPlatform,
+): NormalizedSocialPost {
   const url = canonicalPostUrl(snapshot.url, platform) || snapshot.url
-  const articleText = snapshot.articleTexts.sort((a, b) => b.length - a.length)[0]
-  const postText = articleText || snapshot.description || snapshot.visibleText.slice(0, 8_000)
+  const articleText = snapshot.articleTexts.sort(
+    (a, b) => b.length - a.length,
+  )[0]
+  const postText =
+    articleText || snapshot.description || snapshot.visibleText.slice(0, 8_000)
   const pathParts = new URL(url).pathname.split('/').filter(Boolean)
-  const externalId = platform === 'instagram'
-    ? pathParts[1]
-    : platform === 'x'
-      ? pathParts[pathParts.indexOf('status') + 1]
-      : stableId(url, postText)
+  const externalId =
+    platform === 'instagram'
+      ? pathParts[1]
+      : platform === 'x'
+        ? pathParts[pathParts.indexOf('status') + 1]
+        : stableId(url, postText)
 
   return {
     externalId: externalId || stableId(url, postText),
     url,
     text: postText,
-    kind: /\/reel\//.test(url) ? 'reel' : /\/pulse\//.test(url) ? 'article' : 'post',
+    kind: /\/reel\//.test(url)
+      ? 'reel'
+      : /\/pulse\//.test(url)
+        ? 'article'
+        : 'post',
     imageUrl: snapshot.imageUrl,
     publishedAt: snapshot.publishedAt,
     likeCount: null,
@@ -477,24 +628,27 @@ function profileSections(
   snapshot: PageSnapshot,
   details: LinkedInDetailSnapshot[] = [],
 ): NormalizedProfileSection[] {
-  const privateOrIrrelevantSection = /^(analytics|suggested for you|people you may know|who your viewers also viewed|you might like|resources|open to work)$/i
+  const privateOrIrrelevantSection =
+    /^(analytics|suggested for you|people you may know|who your viewers also viewed|you might like|resources|open to work)$/i
   const baseSections = snapshot.sections
-    .filter((section) => !privateOrIrrelevantSection.test(section.heading.trim()))
+    .filter(
+      (section) => !privateOrIrrelevantSection.test(section.heading.trim()),
+    )
     .map((section) => {
-    const normalizedHeading = section.heading.toLowerCase()
-    const kind = /experience|employment|work history/.test(normalizedHeading)
-      ? 'experience'
-      : /education|school/.test(normalizedHeading)
-        ? 'education'
-        : /certification|license/.test(normalizedHeading)
-          ? 'certification'
-          : /project/.test(normalizedHeading)
-            ? 'project'
-            : /volunteer/.test(normalizedHeading)
-              ? 'volunteering'
-              : /skill/.test(normalizedHeading)
-                ? 'skills'
-                : 'other'
+      const normalizedHeading = section.heading.toLowerCase()
+      const kind = /experience|employment|work history/.test(normalizedHeading)
+        ? 'experience'
+        : /education|school/.test(normalizedHeading)
+          ? 'education'
+          : /certification|license/.test(normalizedHeading)
+            ? 'certification'
+            : /project/.test(normalizedHeading)
+              ? 'project'
+              : /volunteer/.test(normalizedHeading)
+                ? 'volunteering'
+                : /skill/.test(normalizedHeading)
+                  ? 'skills'
+                  : 'other'
       return {
         externalId: stableId(kind, section.heading, section.text),
         kind,
@@ -520,7 +674,9 @@ function profileSections(
   ]
 }
 
-async function downloadProfileImage(url: string | null): Promise<ProfileImageAsset | null> {
+async function downloadProfileImage(
+  url: string | null,
+): Promise<ProfileImageAsset | null> {
   if (!url) return null
 
   let parsed: URL
@@ -584,14 +740,13 @@ async function extractWithBrowserbase(
       userMetadata: { feature: 'public-profile-import', platform, handle },
     })
     browser = await chromium.connectOverCDP(session.connectUrl)
-    const context = browser.contexts()[0] || await browser.newContext()
-    const page = context.pages()[0] || await context.newPage()
+    const context = browser.contexts()[0] || (await browser.newContext())
+    const page = context.pages()[0] || (await context.newPage())
 
     const profileSnapshot = await capturePage(page, sourceUrl, 5)
     assertUsableSnapshot(platform, profileSnapshot)
-    const linkedInDetails = platform === 'linkedin'
-      ? await captureLinkedInDetails(page, handle)
-      : []
+    const linkedInDetails =
+      platform === 'linkedin' ? await captureLinkedInDetails(page, handle) : []
     let discoverySnapshot = profileSnapshot
 
     if (platform === 'linkedin') {
@@ -603,10 +758,12 @@ async function extractWithBrowserbase(
       assertUsableSnapshot(platform, discoverySnapshot)
     }
 
-    const discoveredUrls = Array.from(new Set([
-      ...discoverPostUrls(profileSnapshot, platform),
-      ...discoverPostUrls(discoverySnapshot, platform),
-    ])).slice(0, postLimit())
+    const discoveredUrls = Array.from(
+      new Set([
+        ...discoverPostUrls(profileSnapshot, platform),
+        ...discoverPostUrls(discoverySnapshot, platform),
+      ]),
+    ).slice(0, postLimit())
 
     const posts: NormalizedSocialPost[] = []
     const comments: NormalizedSocialComment[] = []
@@ -622,7 +779,12 @@ async function extractWithBrowserbase(
       }
     }
 
-    const profile = normalizeProfile(platform, handle, sourceUrl, profileSnapshot)
+    const profile = normalizeProfile(
+      platform,
+      handle,
+      sourceUrl,
+      profileSnapshot,
+    )
     return {
       profile,
       posts,
@@ -633,7 +795,8 @@ async function extractWithBrowserbase(
       profileSourceData: {
         browserbaseSessionId: session.id,
         profileSnapshot,
-        discoverySnapshot: discoverySnapshot === profileSnapshot ? null : discoverySnapshot,
+        discoverySnapshot:
+          discoverySnapshot === profileSnapshot ? null : discoverySnapshot,
         linkedInDetails,
         discoveredPostUrls: discoveredUrls,
         extractedPostCount: posts.length,
@@ -642,18 +805,59 @@ async function extractWithBrowserbase(
     }
   } catch (error) {
     if (error instanceof SocialImportError) throw error
-    const message = error instanceof Error ? error.message : 'unknown Browserbase error'
-    throw new SocialImportError(`Browserbase extraction failed: ${message}`, 502)
+    const message =
+      error instanceof Error ? error.message : 'unknown Browserbase error'
+    throw new SocialImportError(
+      `Browserbase extraction failed: ${message}`,
+      502,
+    )
   } finally {
     await browser?.close().catch(() => undefined)
   }
 }
 
 const stopWords = new Set([
-  'about', 'after', 'again', 'also', 'been', 'being', 'from', 'have', 'into', 'just',
-  'more', 'most', 'that', 'their', 'there', 'these', 'they', 'this', 'very', 'what',
-  'when', 'where', 'which', 'with', 'would', 'your', 'https', 'www', 'com', 'the',
-  'and', 'for', 'you', 'are', 'our', 'but', 'not', 'was', 'were', 'has', 'had',
+  'about',
+  'after',
+  'again',
+  'also',
+  'been',
+  'being',
+  'from',
+  'have',
+  'into',
+  'just',
+  'more',
+  'most',
+  'that',
+  'their',
+  'there',
+  'these',
+  'they',
+  'this',
+  'very',
+  'what',
+  'when',
+  'where',
+  'which',
+  'with',
+  'would',
+  'your',
+  'https',
+  'www',
+  'com',
+  'the',
+  'and',
+  'for',
+  'you',
+  'are',
+  'our',
+  'but',
+  'not',
+  'was',
+  'were',
+  'has',
+  'had',
 ])
 
 function personaFromImport(
@@ -680,7 +884,10 @@ function personaFromImport(
     ['Thoughtful', /\b(learn|think|reflect|idea|book|research)\w*\b/],
     ['Social', /\b(friend|community|team|people|together|event)\w*\b/],
   ]
-  const traits = traitSignals.filter(([, pattern]) => pattern.test(lower)).map(([trait]) => trait).slice(0, 3)
+  const traits = traitSignals
+    .filter(([, pattern]) => pattern.test(lower))
+    .map(([trait]) => trait)
+    .slice(0, 3)
   while (traits.length < 3) {
     for (const fallback of ['Curious', 'Expressive', 'Open-minded']) {
       if (!traits.includes(fallback)) {
@@ -693,19 +900,24 @@ function personaFromImport(
   const averageLength = posts.length
     ? posts.reduce((total, post) => total + post.text.length, 0) / posts.length
     : profile.bio.length
-  const style = averageLength > 220
-    ? 'Detailed and reflective'
-    : /[!?]{2,}|[\u{1F300}-\u{1FAFF}]/u.test(corpus)
-      ? 'Energetic and expressive'
-      : 'Concise and conversational'
+  const style =
+    averageLength > 220
+      ? 'Detailed and reflective'
+      : /[!?]{2,}|[\u{1F300}-\u{1FAFF}]/u.test(corpus)
+        ? 'Energetic and expressive'
+        : 'Concise and conversational'
 
   return {
     name: profile.name,
     handle: `@${profile.handle}`,
     traits,
-    interests: interests.length ? interests : ['conversation', 'new experiences', 'connection'],
+    interests: interests.length
+      ? interests
+      : ['conversation', 'new experiences', 'connection'],
     style,
-    bio: profile.bio || `Public ${profile.platform} profile with ${posts.length} imported posts.`,
+    bio:
+      profile.bio ||
+      `Public ${profile.platform} profile with ${posts.length} imported posts.`,
     color,
   }
 }
@@ -715,7 +927,11 @@ export async function importPublicProfile(
   color: 'coral' | 'violet',
 ): Promise<SocialImportPayload> {
   const parsed = parsePublicProfile(input)
-  const extracted = await extractWithBrowserbase(parsed.platform, parsed.handle, parsed.sourceUrl)
+  const extracted = await extractWithBrowserbase(
+    parsed.platform,
+    parsed.handle,
+    parsed.sourceUrl,
+  )
   return {
     ...extracted,
     persona: personaFromImport(extracted.profile, extracted.posts, color),

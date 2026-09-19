@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { lua, lauxlib, lualib, to_luastring, to_jsstring } from 'fengari'
 
 describe('actual Lua app with documented badge API doubles', () => {
-  it('pairs through lost/duplicate packets, bounds frames, replays saved USB data and cleans up', () => {
+  it('elects one sender through lost/duplicate packets, bounds frames, replays and cleans up', () => {
     const source = readFileSync(
       new URL('../public/badge/gptinder.lua', import.meta.url),
       'utf8',

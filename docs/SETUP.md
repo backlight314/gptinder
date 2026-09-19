@@ -1,14 +1,15 @@
 # Your setup: Vercel, Atlas, OpenAI, and the demo
 
-The application code is on branch `jeremy`. Deployment and real badge testing still require your accounts and hardware. The two handoff guides are this file and [BADGE.md](./BADGE.md).
+The physical profile-import implementation is on branch `feature/physical-component-implementation`. Deployment and real badge testing still require your accounts and hardware. The two handoff guides are this file and [BADGE.md](./BADGE.md).
 
 ## 1. Create the services
 
 1. Create a MongoDB Atlas replica-set cluster. Transactions are required; a standalone local MongoDB server is insufficient. Choose a region near Vercel's function region. This repository selects `iad1` (Northern Virginia) in `vercel.json`; change that if your Atlas cluster is elsewhere.
 2. Create a database user scoped to the application database, with permission to read/write and create indexes. Configure Atlas network access for your Vercel project's actual outbound networking arrangement. If you use a broad public allowlist for the demo, use strong isolated credentials and remove it after the event. Use Vercel static egress/private connectivity if available for your plan.
 3. Create a server-side OpenAI project API key with billing and model access. The example uses `OPENAI_MODEL=gpt-4.1-mini`; change it to an available model supporting Responses structured outputs. Each call uses the official SDK, Zod validation, `store: false`, a timeout and bounded retries. Check project spend limits and quotas before rehearsing.
-4. Set up a Resend account and verify a sending domain (DNS records), then create a send-only API key. Set `EMAIL_FROM` to an address on that verified domain. Email is used only to verify identity and recover access, not to read a mailbox.
-5. Import this Git repository into Vercel as a Next.js project. Select Node.js 24 and the `jeremy` branch for your demo deployment. Deploy this branch after configuring the services; local checks do not provision your Vercel project.
+4. Create a Browserbase project and server-side API key for public profile extraction. Check concurrent-session limits because the encounter imports both profiles together.
+5. Set up a Resend account and verify a sending domain (DNS records), then create a send-only API key. Set `EMAIL_FROM` to an address on that verified domain. Email is used only to verify identity and recover access, not to read a mailbox.
+6. Import this Git repository into Vercel as a Next.js project. Select Node.js 24 and the `feature/physical-component-implementation` branch for your demo deployment. Deploy this branch after configuring the services; local checks do not provision your Vercel project.
 
 References: [MongoDB connection pools](https://www.mongodb.com/docs/drivers/node/current/connect/connection-options/connection-pools/), [MongoDB transactions](https://www.mongodb.com/docs/drivers/node/current/crud/transactions/), [Workflow Next.js setup](https://useworkflow.dev/docs/getting-started/next), [OpenAI structured output](https://developers.openai.com/api/docs/guides/structured-outputs).
 
@@ -16,18 +17,21 @@ References: [MongoDB connection pools](https://www.mongodb.com/docs/drivers/node
 
 Copy `.env.example` to `.env.local` for local development. Set the same variables in the appropriate Vercel environment, then redeploy. Never use `NEXT_PUBLIC_` for these values.
 
-| Variable          | Value                                                                                        |
-| ----------------- | -------------------------------------------------------------------------------------------- |
-| `MONGODB_URI`     | Atlas driver connection string, including database-user credentials                          |
-| `MONGODB_DB`      | Database name, e.g. `gptinder_demo`                                                          |
-| `OPENAI_API_KEY`  | Server-side OpenAI API key                                                                   |
-| `OPENAI_MODEL`    | Exact supported model ID for your account                                                    |
-| `AUTH_SECRET`     | At least 32 random characters; keep stable for this database                                 |
-| `APP_URL`         | Exact browser origin, e.g. `https://your-demo.vercel.app`, or `http://localhost:3000`        |
-| `RESEND_API_KEY`  | Server-side, send-only Resend API key                                                        |
-| `EMAIL_FROM`      | Sender on a verified Resend domain, e.g. `GPTinder <signin@example.com>`                     |
-| `ALLOW_DEMO_AUTH` | Leave `false`; `true` enables anonymous key registration for isolated test environments only |
-| `CRON_SECRET`     | At least 32 random characters; required for scheduled recovery and import expiry             |
+| Variable                   | Value                                                                                        |
+| -------------------------- | -------------------------------------------------------------------------------------------- |
+| `MONGODB_URI`              | Atlas driver connection string, including database-user credentials                          |
+| `MONGODB_DB`               | Database name, e.g. `gptinder_demo`                                                          |
+| `OPENAI_API_KEY`           | Server-side OpenAI API key                                                                   |
+| `OPENAI_MODEL`             | Exact supported model ID for your account                                                    |
+| `AUTH_SECRET`              | At least 32 random characters; keep stable for this database                                 |
+| `APP_URL`                  | Exact browser origin, e.g. `https://your-demo.vercel.app`, or `http://localhost:3000`        |
+| `BROWSERBASE_API_KEY`      | Server-side Browserbase API key used to extract both public profiles                         |
+| `BROWSERBASE_PROJECT_ID`   | Browserbase project containing the extraction sessions                                       |
+| `PROFILE_IMPORT_MAX_POSTS` | Maximum discovered posts to inspect per profile, from 1 to 30                                |
+| `RESEND_API_KEY`           | Server-side, send-only Resend API key                                                        |
+| `EMAIL_FROM`               | Sender on a verified Resend domain, e.g. `GPTinder <signin@example.com>`                     |
+| `ALLOW_DEMO_AUTH`          | Leave `false`; `true` enables anonymous key registration for isolated test environments only |
+| `CRON_SECRET`              | At least 32 random characters; required for scheduled recovery and import expiry             |
 
 Generate independent secrets with `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`. Store them privately. Changing `AUTH_SECRET` invalidates sessions, account-key hashes, and badge bindings; do not rotate it casually against a populated demo database.
 
@@ -81,7 +85,9 @@ Run `pnpm demo:seed` against the isolated demo database. It creates three fictio
 
 Sign into each account and use **Download my badge app**. Install that person's file on their own badge using [BADGE.md](./BADGE.md). Do not copy Alex's personalized file onto Blair's badge. The seed contains no real TIPI assessments or private archives; imported-style onboarding is a separate demonstration using an ordinary account.
 
-1. Sign into Alex on the USB laptop. Arm Alex and Blair's badges and bump them. One encounter should appear despite repeated packets or B-button replay.
+Each participant enters and consents to importing their own public Instagram, LinkedIn, or X URL while downloading the badge app. Set `BROWSERBASE_API_KEY` and `BROWSERBASE_PROJECT_ID` in Vercel. A bump imports both URLs in one elected-sender encounter request and stores normalized profiles, visible posts, comments, sections, available media, and an encounter-linked import record in MongoDB.
+
+1. Arm Alex and Blair's badges and bump them. Connect the badge whose screen says **Elected API sender**, then sign into that badge owner's account in the USB browser session. One encounter and two imported profiles should appear despite repeated packets or B-button replay.
 2. Wait for six real OpenAI-generated turns and the result. Alex → Blair should score **76**, with full feature coverage.
 3. Submit: “The last-minute changes stressed me out. I want someone who makes plans ahead of time.”
 4. Review the actual AI proposal. The expected lesson is planning importance **1 → 2**, with the desired value unchanged. Confirm it. If the model asks a clarification or proposes something else, clarify the feedback; the application does not substitute a hardcoded proposal.

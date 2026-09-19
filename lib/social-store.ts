@@ -28,7 +28,8 @@ export async function storeSocialImport(payload: SocialImportPayload) {
     { upsert: true, returnDocument: 'after' },
   )
 
-  if (!profileResult) throw new Error('MongoDB did not return the stored profile')
+  if (!profileResult)
+    throw new Error('MongoDB did not return the stored profile')
   const profileId = profileResult._id as ObjectId
   let storedProfileImage = false
   let storedCoverImage = false
@@ -57,10 +58,12 @@ export async function storeSocialImport(payload: SocialImportPayload) {
     })
     await profiles.updateOne(
       { _id: profileId },
-      { $set: {
-        [`${kind}FileId`]: upload.id,
-        [`${kind}StoredAt`]: now,
-      } },
+      {
+        $set: {
+          [`${kind}FileId`]: upload.id,
+          [`${kind}StoredAt`]: now,
+        },
+      },
     )
     const olderFiles = await bucket
       .find({
@@ -125,7 +128,9 @@ export async function storeSocialImport(payload: SocialImportPayload) {
               platform: payload.profile.platform,
               importedAt: now,
               updatedAt: now,
-              publishedAt: comment.publishedAt ? new Date(comment.publishedAt) : null,
+              publishedAt: comment.publishedAt
+                ? new Date(comment.publishedAt)
+                : null,
             },
             $setOnInsert: { createdAt: now },
           },

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 export const badgeTokenSchema = z.string().regex(/^[a-f0-9]{32}$/)
 export const nonceSchema = z.string().regex(/^[a-f0-9]{16}$/)
-export const bumpSchema = z
+const handshakeSchema = z
   .object({
     type: z.literal('gptinder.encounter'),
     version: z.literal(1),
@@ -15,7 +15,16 @@ export const bumpSchema = z
     (v) => v.localToken !== v.peerToken,
     'Cannot encounter your own badge',
   )
+export const bumpSchema = handshakeSchema.refine(
+  (v) => v.localToken < v.peerToken,
+  'Only the badge elected by the pair may report this encounter',
+)
 export type BumpEvent = z.infer<typeof bumpSchema>
+export function isElectedSender(localToken: string, peerToken: string) {
+  badgeTokenSchema.parse(localToken)
+  badgeTokenSchema.parse(peerToken)
+  return localToken < peerToken
+}
 export const SERIAL_PREFIX = 'GPTINDER:'
 export function parseBadgeLine(line: string): BumpEvent | null {
   // Firmware prepends its app-slug log tag. Accept the marker only once.
@@ -36,7 +45,7 @@ export function parseBadgeLine(line: string): BumpEvent | null {
   }
 }
 export function canonicalHandshake(event: BumpEvent) {
-  bumpSchema.parse(event)
+  handshakeSchema.parse(event)
   return JSON.stringify(
     [
       [event.localToken, event.localNonce],

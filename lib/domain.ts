@@ -169,6 +169,7 @@ export interface BadgeBinding {
   _id: string
   tokenHash: string
   userId: string
+  profileUrl: string
   status: 'active' | 'revoked'
   expiresAt: Date
   createdAt: Date
@@ -176,6 +177,7 @@ export interface BadgeBinding {
 export interface FrozenParticipant {
   userId: string
   name: string
+  profileUrl: string
   profileVersionId: string
   preferenceVersionId: string
 }
@@ -266,7 +268,7 @@ export interface MeResponse {
   preferences: PreferenceVersion | null
   style: import('./import-domain').StyleVersion | null
   evidence: Evidence[]
-  badges: Pick<BadgeBinding, '_id' | 'expiresAt' | 'status'>[]
+  badges: Pick<BadgeBinding, '_id' | 'expiresAt' | 'status' | 'profileUrl'>[]
 }
 export interface EncounterResponse {
   encounter: Encounter
