@@ -80,6 +80,66 @@ The server rebuilds the appropriate agent instruction set on every turn. That
 keeps the personality boundary explicit and means neither agent inherits
 unrelated hidden state.
 
+## Compatibility verdict
+
+After the final conversation turn, each agent independently reflects on the
+same finished transcript. This is a simulated assessment—not a prediction of
+a real relationship, a recommendation to contact someone, or a message for
+sending.
+
+```text
+Completed shared transcript
+          |
+          +--> Agent A: A's snapshot + A's Vector Store context + transcript
+          |        --> A's structured verdict and score
+          |
+          +--> Agent B: B's snapshot + B's Vector Store context + transcript
+                   --> B's structured verdict and score
+          |
+          v
+Server validates both verdicts and calculates their rounded arithmetic mean
+          |
+          v
+Browser renders the conversation, then both verdicts and the combined score
+```
+
+### Verdict contract
+
+Each verdict uses this server-validated shape:
+
+```ts
+type CompatibilityVerdict = {
+  score: number // integer from 0 through 100
+  summary: string // at most 60 words
+  strengths: string[] // 1–3 grounded observations
+  considerations: string[] // 0–2 grounded observations
+}
+```
+
+The end-of-conversation UI will show each agent's perspective and score, plus
+a **combined compatibility score** calculated by the server as
+`Math.round((a.score + b.score) / 2)`. A third model must not generate that
+combined score. Label it as an AI simulation based on one short conversation,
+not an objective measure or real-world promise.
+
+### Implementation requirements
+
+1. Retrieve fresh context separately for each speaker using only that
+   speaker's configured Vector Store. Never include one agent's retrieved
+   material in the other agent's verdict prompt.
+2. Supply the completed transcript and the current speaker's five-field
+   snapshot. A verdict may cite only evidence from those inputs.
+3. Request structured JSON using the Responses API JSON-schema output mode,
+   then validate score bounds, item counts, word limits, and strings before
+   returning it.
+4. Instruct both agents to avoid invented preferences, diagnoses, real-world
+   plans, certainty claims, or pressure to either participant.
+5. Run verdict calls only after every requested conversation turn succeeds. If
+   either verdict is unavailable, return the transcript and display a clear
+   “verdict unavailable” state rather than fabricating a score.
+6. Account for the two extra model calls in loading UI, latency, and cost
+   evaluation. This MVP still persists neither transcript nor verdict.
+
 ## Current implementation
 
 `app/api/match/conversation/route.ts` implements this loop.
@@ -93,6 +153,10 @@ unrelated hidden state.
 5. The prompt requires one respectful message of at most 35 words and forbids
    claims outside the snapshot or retrieved material.
 6. The transcript is returned as JSON and rendered by the date screen.
+7. After the final turn, the API returns both grounded assessments and a
+   server-calculated combined compatibility score as described above. If a
+   verdict cannot be produced, it still returns the transcript and marks the
+   verdict unavailable.
 
 ## Retrieval setup
 
@@ -139,6 +203,7 @@ Create a test set of persona pairs and review generated conversations for:
 - recognizable but non-caricatured communication style;
 - reciprocal curiosity and respect;
 - no fabricated facts, promises, or real-world arrangements; and
+- evidence-backed verdict scores with appropriately cautious language; and
 - acceptable latency and per-simulation cost.
 
 Improve profile quality and prompt design from these results before adding
