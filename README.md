@@ -123,10 +123,10 @@ without them asking.
 
 **How it flows**
 
-1. The bot POSTs `{"user_id", "source": "discord", "messages": [{"content", "timestamp"}]}`
+1. The bot POSTs `{"user_id", "source": "discord", "messages": [{"content", "timestamp", "message_id"}]}`
    to `POST /ingest/discord` (with `X-Ingest-Token` when `INGEST_TOKEN` is set).
 2. The backend merges the messages into `data/raw/<user_id>_discord.json`
-   (deduplicated, sorted by time). `data/raw/` is gitignored; set `DATA_DIR` to
+   (deduplicated by Discord `message_id`, or by timestamp and text for exports without ids; sorted by time). `data/raw/` is gitignored; set `DATA_DIR` to
    change the location. Running `!export` repeatedly, or in several channels,
    keeps adding to the same file.
 3. `POST /personality` with `"discord_user_id": "<id>"` appends that file's
