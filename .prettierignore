@@ -1,0 +1,8 @@
+pnpm-lock.yaml
+.next
+node_modules
+app/.well-known
+badge/*.lua
+tests/*.lua
+package-lock.json
+next-env.d.ts
