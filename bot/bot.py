@@ -18,7 +18,9 @@ async def collect_messages(channel, user_id: int, limit: int) -> list[dict]:
     messages = []
     async for msg in channel.history(limit=limit):
         if msg.author.id == user_id and msg.content.strip():
-            messages.append({"content": msg.content, "timestamp": msg.created_at.isoformat()})
+            messages.append(
+                {"content": msg.content, "timestamp": msg.created_at.isoformat(), "message_id": str(msg.id)}
+            )
     messages.reverse()  # history() is newest-first
     return messages
 
