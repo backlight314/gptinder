@@ -3,6 +3,8 @@ import 'server-only'
 import { createHash } from 'node:crypto'
 import Browserbase from '@browserbasehq/sdk'
 import { chromium, type Browser, type Page } from 'playwright-core'
+import { extractInstagramWithApify, extractLinkedInWithApify, extractXWithApify } from '@/lib/apify-linkedin'
+import { SocialImportError } from '@/lib/social-errors'
 import type {
   ImportedPersona,
   NormalizedProfileSection,
@@ -44,15 +46,7 @@ type LinkedInDetailSnapshot = {
   snapshot: PageSnapshot
 }
 
-export class SocialImportError extends Error {
-  constructor(
-    message: string,
-    public readonly status = 400,
-  ) {
-    super(message)
-    this.name = 'SocialImportError'
-  }
-}
+export { SocialImportError } from '@/lib/social-errors'
 
 function stableId(...values: Array<string | null | undefined>) {
   return createHash('sha256')
@@ -715,7 +709,13 @@ export async function importPublicProfile(
   color: 'coral' | 'violet',
 ): Promise<SocialImportPayload> {
   const parsed = parsePublicProfile(input)
-  const extracted = await extractWithBrowserbase(parsed.platform, parsed.handle, parsed.sourceUrl)
+  const extracted = process.env.APIFY_TOKEN
+    ? parsed.platform === 'linkedin'
+      ? await extractLinkedInWithApify(parsed.handle, parsed.sourceUrl)
+      : parsed.platform === 'instagram'
+        ? await extractInstagramWithApify(parsed.handle, parsed.sourceUrl)
+        : await extractXWithApify(parsed.handle, parsed.sourceUrl)
+    : await extractWithBrowserbase(parsed.platform, parsed.handle, parsed.sourceUrl)
   return {
     ...extracted,
     persona: personaFromImport(extracted.profile, extracted.posts, color),

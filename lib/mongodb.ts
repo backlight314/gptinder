@@ -34,33 +34,41 @@ export async function getMongoDatabase(): Promise<Db> {
 
   if (!global.__gptinderMongoIndexesPromise) {
     global.__gptinderMongoIndexesPromise = Promise.all([
-      database.collection('social_profiles').createIndex(
-        { platform: 1, handle: 1 },
-        { unique: true, name: 'platform_handle_unique' },
+      database.collection('users').createIndex(
+        { displayName: 1 },
+        { name: 'users_display_name' },
+      ),
+      ...(['linkedin_profiles', 'instagram_profiles', 'x_profiles'] as const).map((name) =>
+        database.collection(name).createIndex(
+          { userId: 1 },
+          { unique: true, name: 'profile_user_unique' },
+        ),
+      ),
+      ...(['linkedin_profiles', 'instagram_profiles', 'x_profiles'] as const).map((name) =>
+        database.collection(name).createIndex(
+          { id: 1 },
+          {
+            unique: true,
+            name: 'profile_external_id_unique',
+            partialFilterExpression: { id: { $type: 'string' } },
+          },
+        ),
       ),
       database.collection('social_posts').createIndex(
-        { profileId: 1, externalId: 1 },
-        { unique: true, name: 'profile_post_unique' },
+        { platform: 1, externalId: 1 },
+        { unique: true, name: 'platform_post_unique' },
       ),
       database.collection('social_posts').createIndex(
         { profileId: 1, publishedAt: -1 },
         { name: 'profile_posts_recent' },
       ),
       database.collection('social_comments').createIndex(
-        { profileId: 1, postExternalId: 1, externalId: 1 },
-        { unique: true, name: 'profile_post_comment_unique' },
+        { platform: 1, externalId: 1 },
+        { unique: true, name: 'platform_comment_unique' },
       ),
-      database.collection('social_profile_sections').createIndex(
-        { profileId: 1, externalId: 1 },
-        { unique: true, name: 'profile_section_unique' },
-      ),
-      database.collection('social_profile_sections').createIndex(
-        { profileId: 1, kind: 1, position: 1 },
-        { name: 'profile_sections_ordered' },
-      ),
-      database.collection('profile_imports').createIndex(
-        { createdAt: -1 },
-        { name: 'imports_recent' },
+      database.collection('social_comments').createIndex(
+        { postId: 1, publishedAt: 1 },
+        { name: 'post_comments_ordered' },
       ),
     ]).then(() => undefined)
   }

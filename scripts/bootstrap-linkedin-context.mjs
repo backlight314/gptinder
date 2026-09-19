@@ -8,7 +8,9 @@ const targetUrl = process.argv[2] || 'https://www.linkedin.com/in/jaimin-patel00
 if (!apiKey) throw new Error('BROWSERBASE_API_KEY is required')
 
 const browserbase = new Browserbase({ apiKey })
-const context = await browserbase.contexts.create({
+const context = process.env.BROWSERBASE_LINKEDIN_CONTEXT_ID
+  ? await browserbase.contexts.retrieve(process.env.BROWSERBASE_LINKEDIN_CONTEXT_ID)
+  : await browserbase.contexts.create({
   name: `gptinder-linkedin-${Date.now()}`,
   projectId: projectId || undefined,
 })
@@ -18,6 +20,8 @@ const session = await browserbase.sessions.create({
   browserSettings: {
     allowedDomains: ['linkedin.com'],
     blockAds: true,
+    recordSession: false,
+    logSession: false,
     context: { id: context.id, persist: true },
   },
   userMetadata: { feature: 'linkedin-context-bootstrap' },
@@ -52,7 +56,7 @@ try {
 
   await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 })
   await page.waitForTimeout(3_000)
-  const profileEvidence = await page.locator('main').innerText().catch(() => '')
+  const profileEvidence = await page.locator('main, [role="main"]').first().innerText().catch(() => '')
   const finalUrl = page.url().toLowerCase()
   if (/\/(login|signup|authwall|checkpoint)(\/|\?|$)/.test(finalUrl)) {
     throw new Error('LinkedIn redirected the authenticated context back to a login wall')
