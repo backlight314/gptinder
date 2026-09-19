@@ -34,6 +34,14 @@ function rawDocument(source: Record<string, unknown>) {
   return raw
 }
 
+function uniqueByExternalId<T extends { externalId: string }>(items: T[]) {
+  const unique = new Map<string, T>()
+  for (const item of items) {
+    if (!unique.has(item.externalId)) unique.set(item.externalId, item)
+  }
+  return Array.from(unique.values())
+}
+
 export async function storeSocialImport(payload: SocialImportPayload, requestedUserId?: string) {
   const database = await getMongoDatabase()
   const now = new Date()
@@ -71,10 +79,13 @@ export async function storeSocialImport(payload: SocialImportPayload, requestedU
   if (!profileResult) throw new Error('MongoDB did not return the stored platform profile')
   const profileId = profileResult._id as ObjectId
 
+  const importedPosts = uniqueByExternalId(payload.posts)
+  const importedComments = uniqueByExternalId(payload.comments)
+
   const posts = database.collection('social_posts')
-  if (payload.posts.length) {
+  if (importedPosts.length) {
     await posts.bulkWrite(
-      payload.posts.map(({ sourceData, ...post }) => ({
+      importedPosts.map(({ sourceData, ...post }) => ({
         updateOne: {
           filter: { platform: payload.profile.platform, externalId: post.externalId },
           update: {
@@ -98,7 +109,7 @@ export async function storeSocialImport(payload: SocialImportPayload, requestedU
   }
   await posts.deleteMany({
     profileId,
-    externalId: { $nin: payload.posts.map((post) => post.externalId) },
+    externalId: { $nin: importedPosts.map((post) => post.externalId) },
   })
 
   const storedPosts = await posts
@@ -107,9 +118,9 @@ export async function storeSocialImport(payload: SocialImportPayload, requestedU
   const postIds = new Map(storedPosts.map((post) => [String(post.externalId), post._id]))
 
   const comments = database.collection('social_comments')
-  if (payload.comments.length) {
+  if (importedComments.length) {
     await comments.bulkWrite(
-      payload.comments.map(({ sourceData, ...comment }) => ({
+      importedComments.map(({ sourceData, ...comment }) => ({
         updateOne: {
           filter: { platform: payload.profile.platform, externalId: comment.externalId },
           update: {
@@ -138,14 +149,14 @@ export async function storeSocialImport(payload: SocialImportPayload, requestedU
   }
   await comments.deleteMany({
     profileId,
-    externalId: { $nin: payload.comments.map((comment) => comment.externalId) },
+    externalId: { $nin: importedComments.map((comment) => comment.externalId) },
   })
 
   return {
     userId,
     profileId: profileId.toHexString(),
-    storedPostCount: payload.posts.length,
-    storedCommentCount: payload.comments.length,
+    storedPostCount: importedPosts.length,
+    storedCommentCount: importedComments.length,
     storedSectionCount: payload.sections.length,
     storedProfileImage: Boolean(payload.profile.avatarUrl),
     storedCoverImage: Boolean(payload.profile.coverImageUrl),
