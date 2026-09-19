@@ -17,10 +17,11 @@ simulation layer.
 3. **Private knowledge layer.** Query only the current speaker's existing
    Vector Store for relevant facts. Do not embed an entire history in every
    request or build ingestion into this application.
-4. **Two-agent simulator (implemented).** Keep credentials server-side; give
+4. **Two-agent simulator and verdict (implemented).** Keep credentials server-side; give
    each agent its own persona and the shared transcript; alternate turns;
-   display the result in the app. It is a contained simulation and cannot send
-   messages externally.
+   then let each agent independently assess the completed conversation. Display
+   both perspectives and their server-calculated average score. It is a
+   contained simulation and cannot send messages externally.
 5. **Evaluation.** Build a small review set of persona prompts and assess
    faithfulness, factuality, tone, safety, and cost. Improve prompt/context
    retrieval before considering fine-tuning.
@@ -34,8 +35,11 @@ simulation layer.
    `/api/match/conversation`.
 2. The server alternates six Responses API calls, passing the transcript to
    the next speaker on each turn.
-3. The server returns the transcript and the UI renders it. No external
-   message is sent or stored.
+3. After the final turn, each agent retrieves only its own persona context and
+   returns a structured, grounded verdict. The server averages the two scores.
+4. The server returns the transcript, verdicts, and combined score for the UI
+   to render. If either verdict fails, it returns the transcript and an
+   unavailable-verdict state instead. No external message is sent or stored.
 
 ## Configuration
 
