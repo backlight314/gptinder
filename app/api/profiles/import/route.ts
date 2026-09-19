@@ -9,6 +9,7 @@ const requestSchema = z.object({
   url: z.string().trim().min(1).max(500),
   personaSlot: z.enum(['a', 'b']),
   consent: z.literal(true),
+  userId: z.string().trim().regex(/^usr_[a-z0-9_]{3,64}$/).optional(),
 })
 
 export async function POST(request: Request) {
@@ -32,10 +33,11 @@ export async function POST(request: Request) {
       body.data.url,
       body.data.personaSlot === 'a' ? 'coral' : 'violet',
     )
-    const stored = await storeSocialImport(imported)
+    const stored = await storeSocialImport(imported, body.data.userId)
 
     return Response.json({
       profileId: stored.profileId,
+      userId: stored.userId,
       storedPostCount: stored.storedPostCount,
       storedCommentCount: stored.storedCommentCount,
       storedSectionCount: stored.storedSectionCount,

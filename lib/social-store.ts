@@ -1,102 +1,94 @@
 import 'server-only'
 
-import { GridFSBucket, ObjectId } from 'mongodb'
+import { createHash } from 'node:crypto'
+import { ObjectId } from 'mongodb'
 import { getMongoDatabase } from '@/lib/mongodb'
-import type { SocialImportPayload } from '@/lib/social-types'
+import type { SocialImportPayload, SocialPlatform } from '@/lib/social-types'
 
-export async function storeSocialImport(payload: SocialImportPayload) {
+const PROFILE_COLLECTIONS: Record<SocialPlatform, string> = {
+  linkedin: 'linkedin_profiles',
+  instagram: 'instagram_profiles',
+  x: 'x_profiles',
+}
+
+function personalizedUserId(name: string, identity: string) {
+  const slug = name
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 32) || 'user'
+  const suffix = createHash('sha256').update(identity).digest('hex').slice(0, 6)
+  return `usr_${slug}_${suffix}`
+}
+
+function rawDocument(source: Record<string, unknown>) {
+  const raw = { ...source }
+  delete raw._id
+  delete raw.userId
+  delete raw.syncedAt
+  delete raw.provider
+  delete raw.warnings
+  delete raw.importMetadata
+  return raw
+}
+
+export async function storeSocialImport(payload: SocialImportPayload, requestedUserId?: string) {
   const database = await getMongoDatabase()
   const now = new Date()
-  const profiles = database.collection('social_profiles')
+  const profileCollection = database.collection(PROFILE_COLLECTIONS[payload.profile.platform])
+  const rawProfile = rawDocument(payload.profileSourceData)
+  const platformIdentity = String(rawProfile.id || payload.profile.externalId || payload.profile.handle)
+  const profileIdentity = rawProfile.id
+    ? { id: rawProfile.id }
+    : requestedUserId
+      ? { userId: requestedUserId }
+      : { userId: '__new_profile__' }
 
-  const profileResult = await profiles.findOneAndUpdate(
+  const existingProfile = await profileCollection.findOne(
+    profileIdentity,
+    { projection: { userId: 1 } },
+  )
+  const userId = requestedUserId
+    || (typeof existingProfile?.userId === 'string' ? existingProfile.userId : null)
+    || personalizedUserId(payload.profile.name, `${payload.profile.platform}:${platformIdentity}`)
+
+  await database.collection<{ _id: string; displayName: string; createdAt: Date; updatedAt: Date }>('users').updateOne(
+    { _id: userId },
     {
-      platform: payload.profile.platform,
-      handle: payload.profile.handle.toLowerCase(),
-    },
-    {
-      $set: {
-        ...payload.profile,
-        handle: payload.profile.handle.toLowerCase(),
-        provider: 'browserbase',
-        sourceData: payload.profileSourceData,
-        lastImportedAt: now,
-        updatedAt: now,
-      },
+      $set: { displayName: payload.profile.name, updatedAt: now },
       $setOnInsert: { createdAt: now },
     },
-    { upsert: true, returnDocument: 'after' },
+    { upsert: true },
   )
 
-  if (!profileResult) throw new Error('MongoDB did not return the stored profile')
+  const profileResult = await profileCollection.findOneAndUpdate(
+    rawProfile.id ? { id: rawProfile.id } : { userId },
+    { $set: { ...rawProfile, userId, syncedAt: now } },
+    { upsert: true, returnDocument: 'after' },
+  )
+  if (!profileResult) throw new Error('MongoDB did not return the stored platform profile')
   const profileId = profileResult._id as ObjectId
-  let storedProfileImage = false
-  let storedCoverImage = false
 
-  const storeProfileMedia = async (
-    asset: NonNullable<SocialImportPayload['profileImage']>,
-    kind: 'avatar' | 'cover',
-  ) => {
-    const bucket = new GridFSBucket(database, { bucketName: 'profile_media' })
-    const upload = bucket.openUploadStream(
-      `${payload.profile.platform}/${payload.profile.handle.toLowerCase()}/${kind}`,
-      {
-        metadata: {
-          profileId,
-          kind,
-          sourceUrl: asset.sourceUrl,
-          contentType: asset.contentType,
-          capturedAt: now,
-        },
-      },
-    )
-    await new Promise<void>((resolve, reject) => {
-      upload.once('finish', () => resolve())
-      upload.once('error', reject)
-      upload.end(Buffer.from(asset.bytes))
-    })
-    await profiles.updateOne(
-      { _id: profileId },
-      { $set: {
-        [`${kind}FileId`]: upload.id,
-        [`${kind}StoredAt`]: now,
-      } },
-    )
-    const olderFiles = await bucket
-      .find({
-        'metadata.profileId': profileId,
-        'metadata.kind': kind,
-        _id: { $ne: upload.id },
-      })
-      .toArray()
-    await Promise.all(olderFiles.map((file) => bucket.delete(file._id)))
-  }
-
-  if (payload.profileImage) {
-    await storeProfileMedia(payload.profileImage, 'avatar')
-    storedProfileImage = true
-  }
-
-  if (payload.coverImage) {
-    await storeProfileMedia(payload.coverImage, 'cover')
-    storedCoverImage = true
-  }
-
+  const posts = database.collection('social_posts')
   if (payload.posts.length) {
-    await database.collection('social_posts').bulkWrite(
-      payload.posts.map((post) => ({
+    await posts.bulkWrite(
+      payload.posts.map(({ sourceData, ...post }) => ({
         updateOne: {
-          filter: { profileId, externalId: post.externalId },
+          filter: { platform: payload.profile.platform, externalId: post.externalId },
           update: {
             $set: {
-              ...post,
+              userId,
               profileId,
               platform: payload.profile.platform,
-              importedAt: now,
-              updatedAt: now,
+              externalId: post.externalId,
+              url: post.url,
+              text: post.text,
               publishedAt: post.publishedAt ? new Date(post.publishedAt) : null,
+              raw: sourceData,
+              syncedAt: now,
             },
-            $setOnInsert: { createdAt: now },
           },
           upsert: true,
         },
@@ -104,30 +96,39 @@ export async function storeSocialImport(payload: SocialImportPayload) {
       { ordered: false },
     )
   }
-  await database.collection('social_posts').deleteMany({
+  await posts.deleteMany({
     profileId,
     externalId: { $nin: payload.posts.map((post) => post.externalId) },
   })
 
+  const storedPosts = await posts
+    .find({ profileId }, { projection: { _id: 1, externalId: 1 } })
+    .toArray()
+  const postIds = new Map(storedPosts.map((post) => [String(post.externalId), post._id]))
+
+  const comments = database.collection('social_comments')
   if (payload.comments.length) {
-    await database.collection('social_comments').bulkWrite(
-      payload.comments.map((comment) => ({
+    await comments.bulkWrite(
+      payload.comments.map(({ sourceData, ...comment }) => ({
         updateOne: {
-          filter: {
-            profileId,
-            postExternalId: comment.postExternalId,
-            externalId: comment.externalId,
-          },
+          filter: { platform: payload.profile.platform, externalId: comment.externalId },
           update: {
             $set: {
-              ...comment,
+              userId,
               profileId,
+              postId: postIds.get(comment.postExternalId) || null,
               platform: payload.profile.platform,
-              importedAt: now,
-              updatedAt: now,
+              externalId: comment.externalId,
+              parentCommentId: null,
+              text: comment.text,
               publishedAt: comment.publishedAt ? new Date(comment.publishedAt) : null,
+              author: {
+                name: comment.authorName,
+                username: comment.authorHandle,
+              },
+              raw: sourceData,
+              syncedAt: now,
             },
-            $setOnInsert: { createdAt: now },
           },
           upsert: true,
         },
@@ -135,58 +136,18 @@ export async function storeSocialImport(payload: SocialImportPayload) {
       { ordered: false },
     )
   }
-  await database.collection('social_comments').deleteMany({
+  await comments.deleteMany({
     profileId,
     externalId: { $nin: payload.comments.map((comment) => comment.externalId) },
   })
 
-  if (payload.sections.length) {
-    await database.collection('social_profile_sections').bulkWrite(
-      payload.sections.map((section) => ({
-        updateOne: {
-          filter: { profileId, externalId: section.externalId },
-          update: {
-            $set: {
-              ...section,
-              profileId,
-              platform: payload.profile.platform,
-              importedAt: now,
-              updatedAt: now,
-            },
-            $setOnInsert: { createdAt: now },
-          },
-          upsert: true,
-        },
-      })),
-      { ordered: false },
-    )
-  }
-  await database.collection('social_profile_sections').deleteMany({
-    profileId,
-    externalId: { $nin: payload.sections.map((section) => section.externalId) },
-  })
-
-  await database.collection('profile_imports').insertOne({
-    profileId,
-    platform: payload.profile.platform,
-    handle: payload.profile.handle.toLowerCase(),
-    sourceUrl: payload.profile.sourceUrl,
-    provider: 'browserbase',
-    postCount: payload.posts.length,
-    commentCount: payload.comments.length,
-    sectionCount: payload.sections.length,
-    profileImageStored: storedProfileImage,
-    coverImageStored: storedCoverImage,
-    status: 'completed',
-    createdAt: now,
-  })
-
   return {
+    userId,
     profileId: profileId.toHexString(),
     storedPostCount: payload.posts.length,
     storedCommentCount: payload.comments.length,
     storedSectionCount: payload.sections.length,
-    storedProfileImage,
-    storedCoverImage,
+    storedProfileImage: Boolean(payload.profile.avatarUrl),
+    storedCoverImage: Boolean(payload.profile.coverImageUrl),
   }
 }
