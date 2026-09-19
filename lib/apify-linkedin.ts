@@ -14,8 +14,7 @@ import type {
 const APIFY_API = 'https://api.apify.com/v2'
 const PROFILE_ACTOR = 'harvestapi~linkedin-profile-scraper'
 const POSTS_ACTOR = 'harvestapi~linkedin-profile-posts'
-const X_ACTOR = 'apidojo~twitter-profile-scraper'
-const X_REPLIES_ACTOR = 'apidojo~twitter-replies-scraper'
+const X_ACTOR = 'santamaria-automations~twitter-x-profiles-tweets-scraper'
 const INSTAGRAM_PROFILE_ACTOR = 'apify~instagram-profile-scraper'
 const INSTAGRAM_CONTENT_ACTOR = 'apify~instagram-scraper'
 
@@ -393,87 +392,58 @@ export async function extractXWithApify(
 ): Promise<Omit<SocialImportPayload, 'persona'>> {
   const maxPosts = configuredMaxPosts()
   const result = await runActorWithItems(X_ACTOR, {
-    twitterHandles: [requestedHandle],
-    includeNativeRetweets: true,
-    getReplies: false,
-    minReplyCount: 0,
-    getAboutData: true,
-    maxItems: Math.min(maxPosts * 25, 500),
+    usernames: [requestedHandle],
+    tweetsPerUser: maxPosts,
+    includeReplies: false,
+    includeRetweets: true,
+    includeProfileOnlyItems: true,
+    maxIPRotations: 5,
   })
-  const firstTweet = result.items.find((item) => Object.keys(record(item.author)).length > 0)
-  const rawProfile = record(firstTweet?.author)
+  const firstItem = result.items.find((item) => Object.keys(record(item.author)).length > 0)
+  const rawProfile = record(firstItem?.author)
   if (!Object.keys(rawProfile).length) throw new SocialImportError('Apify returned no public X profile data for that handle.', 422)
 
-  const handle = firstText(rawProfile.userName, requestedHandle) || requestedHandle
+  const handle = firstText(rawProfile.username, requestedHandle) || requestedHandle
   const profile: NormalizedSocialProfile = {
     platform: 'x',
     externalId: text(rawProfile.id),
     handle,
-    name: firstText(rawProfile.name, handle) || handle,
+    name: firstText(rawProfile.display_name, handle) || handle,
     headline: null,
-    bio: text(rawProfile.description) || '',
-    avatarUrl: firstText(rawProfile.profilePicture, nested(rawProfile, 'about', 'avatarUrl')),
-    coverImageUrl: text(rawProfile.coverPicture),
+    bio: text(rawProfile.bio) || '',
+    avatarUrl: text(rawProfile.profile_image_url),
+    coverImageUrl: text(rawProfile.profile_banner_url),
     location: text(rawProfile.location),
-    followerCount: number(rawProfile.followers),
-    followingCount: number(rawProfile.following),
+    followerCount: number(rawProfile.followers_count),
+    followingCount: number(rawProfile.following_count),
     connectionCount: null,
-    isVerified: boolean(rawProfile.isVerified) || boolean(rawProfile.isBlueVerified),
-    sourceUrl: firstText(rawProfile.url, sourceUrl) || sourceUrl,
+    isVerified: boolean(rawProfile.verified) || boolean(rawProfile.blue_verified),
+    sourceUrl: firstText(rawProfile.profile_url, sourceUrl) || sourceUrl,
   }
 
   const authored = result.items.filter((item) => {
     const author = record(item.author)
-    return text(author.userName)?.toLowerCase() === handle.toLowerCase()
+    return item.item_type === 'tweet' && text(author.username)?.toLowerCase() === handle.toLowerCase()
   }).slice(0, maxPosts)
-  const selectedIds = new Set(authored.map((item) => text(item.id)).filter((id): id is string => Boolean(id)))
   const posts: NormalizedSocialPost[] = authored.map((item) => {
-    const media = records(item.media)
+    const tweet = record(item.tweet)
+    const engagement = record(tweet.engagement)
+    const media = records(nested(tweet, 'entities', 'media'))
     return {
-      externalId: text(item.id) || stableId('x-post', item),
-      url: firstText(item.url, item.twitterUrl),
-      text: firstText(item.fullText, item.text) || '',
-      kind: boolean(item.isRetweet) ? 'repost' : boolean(item.isQuote) ? 'quote' : boolean(item.isReply) ? 'reply' : 'post',
-      imageUrl: firstText(media[0]?.media_url_https, media[0]?.url, media[0]?.preview_image_url),
-      publishedAt: isoDate(item.createdAt),
-      likeCount: number(item.likeCount),
-      commentCount: number(item.replyCount),
-      viewCount: number(item.viewCount),
+      externalId: text(tweet.id) || stableId('x-post', item),
+      url: text(tweet.url),
+      text: text(tweet.text) || '',
+      kind: boolean(tweet.is_retweet) ? 'repost' : boolean(tweet.is_quote) ? 'quote' : boolean(tweet.is_reply) ? 'reply' : 'post',
+      imageUrl: firstText(media[0]?.url, media[0]?.preview_url),
+      publishedAt: isoDate(tweet.created_at),
+      likeCount: number(engagement.like_count),
+      commentCount: number(engagement.reply_count),
+      viewCount: number(engagement.view_count),
       sourceData: item,
     }
   })
-  const replyTargets = posts.filter((post) => (post.commentCount || 0) > 0 && post.url).map((post) => post.url as string)
-  const repliesRun = replyTargets.length
-    ? await runActorWithItems(X_REPLIES_ACTOR, { startUrls: replyTargets, useSearch: false, maxItems: 500 })
-    : null
-  const comments: NormalizedSocialComment[] = (repliesRun?.items || [])
-    .filter((item) => {
-      const rootId = firstText(item.conversationId, item.inReplyToId)
-      return Boolean(rootId && selectedIds.has(rootId))
-    })
-    .map((item) => {
-      const author = record(item.author)
-      return {
-        externalId: text(item.id) || stableId('x-comment', item),
-        postExternalId: firstText(item.conversationId, item.inReplyToId) || stableId('x-parent', item),
-        authorName: text(author.name),
-        authorHandle: text(author.userName),
-        text: firstText(item.fullText, item.text) || '',
-        publishedAt: isoDate(item.createdAt),
-        sourceData: item,
-      }
-    })
-  const sections: NormalizedProfileSection[] = [
-    ['about', rawProfile.about],
-    ['entities', rawProfile.entities],
-  ].filter((entry) => Object.keys(record(entry[1])).length > 0).map(([kind, value], position) => ({
-    externalId: `x:${kind}`,
-    kind: String(kind),
-    heading: String(kind),
-    text: JSON.stringify(value),
-    position,
-    sourceData: record(value),
-  }))
+  const comments: NormalizedSocialComment[] = []
+  const sections: NormalizedProfileSection[] = []
   const [profileImage, coverImage] = await Promise.all([
     downloadImage(profile.avatarUrl),
     downloadImage(profile.coverImageUrl),
@@ -483,12 +453,12 @@ export async function extractXWithApify(
     provider: 'apify',
     importMetadata: {
       profilePostsRun: { actor: result.actor, runId: result.runId, datasetId: result.datasetId, startedAt: result.startedAt, finishedAt: result.finishedAt, itemCount: result.items.length },
-      repliesRun: repliesRun ? { actor: repliesRun.actor, runId: repliesRun.runId, datasetId: repliesRun.datasetId, startedAt: repliesRun.startedAt, finishedAt: repliesRun.finishedAt, itemCount: repliesRun.items.length } : null,
-      limits: { maxPosts, maxItems: Math.min(maxPosts * 25, 500) },
+      repliesRun: null,
+      limits: { maxPosts },
     },
     warnings: [
       `X posts are capped at ${maxPosts} by PROFILE_IMPORT_MAX_POSTS.`,
-      'X replies are capped at 500 total and can be incomplete for login-gated or protected content.',
+      'X replies are not imported; protected or suspended accounts may return profile-only or no data.',
     ],
     profile,
     posts,

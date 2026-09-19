@@ -232,7 +232,7 @@ export async function POST(request: Request) {
   const vectorStoreIdA = process.env.OPENAI_VECTOR_STORE_ID_A
   const vectorStoreIdB = process.env.OPENAI_VECTOR_STORE_ID_B
   const vectorStoreIds: Record<Speaker, string | undefined> = { a: vectorStoreIdA, b: vectorStoreIdB }
-  const models: Record<Speaker, string> = { a: process.env.OPENAI_MODEL_A ?? 'gpt-5', b: process.env.OPENAI_MODEL_B ?? 'gpt-5' }
+  const models: Record<Speaker, string> = { a: process.env.OPENAI_MODEL_A ?? 'gpt-5.6-luna', b: process.env.OPENAI_MODEL_B ?? 'gpt-5.6-luna' }
   const messages: ChatMessage[] = []
   const socialVoiceMemory = await Promise.all([
     loadSocialVoiceMemory(participants.a.userId),
