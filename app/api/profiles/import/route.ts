@@ -36,7 +36,6 @@ export async function POST(request: Request) {
       )
     }
 
-    const color = body.data.personaSlot === 'a' ? 'coral' : 'violet'
     const requestedUrls = [...(body.data.url ? [body.data.url] : []), ...(body.data.urls || [])]
     const byPlatform = new Map<SocialPlatform, ParsedProfile>()
     for (const requestedUrl of requestedUrls) {
@@ -55,7 +54,7 @@ export async function POST(request: Request) {
       .map((platform) => byPlatform.get(platform))
       .filter((profile): profile is ParsedProfile => Boolean(profile))
     const importedProfiles = await Promise.all(
-      orderedProfiles.map((profile) => importPublicProfile(profile.sourceUrl, color)),
+      orderedProfiles.map((profile) => importPublicProfile(profile.sourceUrl)),
     )
 
     let userId = body.data.userId
