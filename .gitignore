@@ -16,3 +16,12 @@ __v0_jsx-dev-runtime.ts
 node_modules
 .next/
 .DS_Store
+
+# Backend / bot Python artifacts
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Ingested raw user data (never commit)
+data/raw/
