@@ -97,6 +97,7 @@ class ScoreResponse(BaseModel):
 class DiscordMessage(BaseModel):
     content: str = Field(max_length=4000)
     timestamp: datetime
+    message_id: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 class DiscordIngestRequest(BaseModel):

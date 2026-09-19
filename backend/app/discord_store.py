@@ -18,7 +18,10 @@ def _normalize(message: DiscordMessage) -> dict:
     ts = message.timestamp
     if ts.tzinfo is None:
         ts = ts.replace(tzinfo=timezone.utc)
-    return {"content": message.content, "timestamp": ts.astimezone(timezone.utc).isoformat()}
+    doc = {"content": message.content, "timestamp": ts.astimezone(timezone.utc).isoformat()}
+    if message.message_id:
+        doc["message_id"] = message.message_id
+    return doc
 
 
 def load_discord_messages(user_id: str) -> list[dict]:
@@ -29,16 +32,35 @@ def load_discord_messages(user_id: str) -> list[dict]:
 
 
 def save_discord_messages(user_id: str, incoming: list[DiscordMessage]) -> tuple[int, int]:
-    """Merge `incoming` into the stored export. Returns (newly_added, total_stored)."""
+    """Merge `incoming` into the stored export. Returns (newly_added, total_stored).
+
+    A message with a `message_id` is a duplicate if that id is already stored for the user.
+    A message without one is a duplicate if the same (timestamp, content) is already stored.
+    """
     merged = load_discord_messages(user_id)
-    seen = {(m["timestamp"], m["content"]) for m in merged}
+    seen_ids = {m["message_id"] for m in merged if m.get("message_id")}
+    seen_keys = {(m["timestamp"], m["content"]) for m in merged}
+    unidentified = {(m["timestamp"], m["content"]): m for m in merged if not m.get("message_id")}
     added = 0
     for message in map(_normalize, incoming):
         key = (message["timestamp"], message["content"])
-        if key not in seen:
-            seen.add(key)
-            merged.append(message)
-            added += 1
+        message_id = message.get("message_id")
+        if message_id:
+            if message_id in seen_ids:
+                continue
+            seen_ids.add(message_id)
+            earlier_export = unidentified.pop(key, None)
+            if earlier_export is not None:
+                # Stored before ids existed: attach the id instead of adding a second copy.
+                earlier_export["message_id"] = message_id
+                continue
+        else:
+            if key in seen_keys:
+                continue
+            unidentified[key] = message
+        seen_keys.add(key)
+        merged.append(message)
+        added += 1
     merged.sort(key=lambda m: m["timestamp"])
 
     RAW_DIR.mkdir(parents=True, exist_ok=True)
