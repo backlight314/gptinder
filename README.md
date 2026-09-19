@@ -8,6 +8,42 @@ This repository is linked to a [v0](https://v0.app) project. You can continue de
 
 [Continue working on v0 →](https://v0.app/chat/projects/prj_x5RUpsvNaKjJVpiyoM6I9Qvh5g9a)
 
+## Public profile imports
+
+The profile form uses Apify for LinkedIn, Instagram, and X. It captures profile fields, posts, comments/replies, and
+sections such as experience, education, certifications, projects, and skills,
+then stores queryable records plus the complete raw social data in MongoDB.
+Credentials never reach the browser client.
+
+Copy `.env.example` to `.env.local` and set:
+
+```bash
+MONGODB_URI="mongodb+srv://..."
+MONGODB_DB="gptinder"
+APIFY_TOKEN="apify_api_..."
+PROFILE_IMPORT_MAX_POSTS="12"
+```
+
+For Vercel, add the same values under Project Settings → Environment Variables.
+Use a MongoDB Atlas database user scoped to this application and allow network
+access from Vercel. The primary schema has six collections:
+
+- `users`: personalized string `_id` and display name
+- `linkedin_profiles`: raw LinkedIn profile fields, including embedded profile sections
+- `instagram_profiles`: raw Instagram profile fields
+- `x_profiles`: raw X profile fields
+- `social_posts`: posts from every platform with `userId`, `profileId`, and raw data
+- `social_comments`: comments/replies with `userId`, `profileId`, `postId`, and raw data
+
+The importer accepts Instagram person profiles, LinkedIn `/in/` person profiles,
+and X profile URLs. With `APIFY_TOKEN` configured, these imports do not depend
+on personal browser logins. Scraper/provider metadata is not written to the
+primary profile collections.
+
+The one-time `npm run migrate:social-schema` command migrates the original
+schema without deleting it. Original documents and GridFS media are preserved
+under `legacy_*` collections.
+
 ## Getting Started
 
 Create a local environment file from the example and fill in the server-only
