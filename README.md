@@ -41,9 +41,12 @@ and X profile URLs. With `APIFY_TOKEN` configured, these imports do not depend
 on personal browser logins. Scraper/provider metadata is not written to the
 primary profile collections.
 
-The profile form saves its manual persona snapshot to `personas` before moving
-to the next step. Re-saving the same `userId` and slot updates the existing
-document and increments its revision; it does not create a duplicate.
+The profile form stores entered social links first, then saves the manual
+persona snapshot using the returned canonical `userId`. Re-saving the same
+`userId` and slot updates the existing document and increments its revision;
+it does not create a duplicate. Exact external profile IDs also take priority
+over a stale UI `userId`, so a retry cannot move one social identity to a new
+user record.
 
 The one-time `npm run migrate:social-schema` command migrates the original
 schema without deleting it. Original documents and GridFS media are preserved
