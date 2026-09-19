@@ -56,3 +56,47 @@ pnpm build
 ```
 
 Open [http://localhost:3000](http://localhost:3000). Web Serial works on localhost for development; deployment requires HTTPS.
+
+## Discord data source
+
+A small Discord bot (`bot/`) lets people send their own message history to the
+FastAPI backend (`backend/`), where it becomes input for persona generation.
+
+**Run it locally**
+
+```bash
+# 1. Backend
+cd backend
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+cp .env.example .env            # set ANTHROPIC_API_KEY and INGEST_TOKEN
+.venv/bin/uvicorn app.main:app --reload
+
+# 2. Bot (separate terminal)
+cd bot
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+cp .env.example .env            # set DISCORD_BOT_TOKEN; INGEST_TOKEN must match the backend's
+.venv/bin/python bot.py
+```
+
+Bot setup: create an application at discord.com/developers/applications, add a
+Bot, enable the **Message Content Intent**, and invite it with the `bot` scope
+plus View Channels and Read Message History. Tokens live only in `.env` files,
+which are gitignored.
+
+**Trigger an export:** in any channel the bot can read, a user types `!export`.
+The bot scans the last `HISTORY_LIMIT` (default 500) messages in that channel and
+sends only the caller's own text messages, so nobody's history is exported
+without them asking.
+
+**How it flows**
+
+1. The bot POSTs `{"user_id", "source": "discord", "messages": [{"content", "timestamp", "message_id"}]}`
+   to `POST /ingest/discord` (with `X-Ingest-Token` when `INGEST_TOKEN` is set).
+2. The backend merges the messages into `data/raw/<user_id>_discord.json`
+   (deduplicated by Discord `message_id`, or by timestamp and text for exports without ids; sorted by time). `data/raw/` is gitignored; set `DATA_DIR` to
+   change the location. Running `!export` repeatedly, or in several channels,
+   keeps adding to the same file.
+3. `POST /personality` with `"discord_user_id": "<id>"` appends that file's
+   messages, as a `--- Discord messages ---` section, to the text (alongside any
+   profile or WhatsApp text in the request) that feeds the four extraction calls.
+   It returns 404 if that user has no export yet.
