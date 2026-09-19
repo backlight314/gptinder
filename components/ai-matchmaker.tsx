@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ArrowRight, Check, ChevronLeft, Heart, MessageCircle, RefreshCw, Sparkles, Stars, UserRound, Zap } from 'lucide-react'
+import { ArrowRight, Check, ChevronLeft, Database, Heart, Link2, MessageCircle, RefreshCw, Sparkles, Stars, UserRound, Zap } from 'lucide-react'
 
 type PersonKey = 'a' | 'b'
 type Persona = {
@@ -25,23 +25,19 @@ type ConversationResponse = {
   verdictUnavailable?: boolean
   error?: string
 }
+type ImportResponse = {
+  userId?: string
+  storedProfileCount?: number
+  storedPostCount?: number
+  storedCommentCount?: number
+  error?: string
+}
+type SocialLinks = { linkedin: string; instagram: string; x: string }
 type Step = 'landing' | 'profile-a' | 'profile-b' | 'date'
 
 const starterPersonas: Record<PersonKey, Persona> = {
-  a: {
-    name: 'Maya',
-    bio: 'A curious creative who collects tiny adventures and believes the best stories start with “we probably shouldn’t…”',
-    traits: ['Curious', 'Warm', 'Spontaneous'],
-    interests: ['indie films', 'street food', 'ceramics'],
-    style: 'Thoughtful, playful, and concise',
-  },
-  b: {
-    name: 'Leo',
-    bio: 'An optimistic maker who knows every good neighborhood spot and is always planning the next small escape.',
-    traits: ['Witty', 'Grounded', 'Optimistic'],
-    interests: ['live music', 'cooking', 'weekend trips'],
-    style: 'Quick-witted, warm, and genuinely engaged',
-  },
+  a: { name: '', bio: '', traits: [], interests: [], style: '' },
+  b: { name: '', bio: '', traits: [], interests: [], style: '' },
 }
 
 function Logo() {
@@ -82,9 +78,96 @@ function ProfilePreview({ persona, user }: { persona: Persona; user: PersonKey }
 
 function Profile({ user, initial, next, back }: { user: PersonKey; initial: Persona; next: (persona: Persona) => void; back: () => void }) {
   const [persona, setPersona] = useState(initial)
+  const [links, setLinks] = useState<SocialLinks>({ linkedin: '', instagram: '', x: '' })
+  const [consent, setConsent] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importError, setImportError] = useState('')
+  const [importStatus, setImportStatus] = useState('')
+  const [userId, setUserId] = useState<string>()
   const isValid = Boolean(persona.name.trim() && persona.bio.trim() && persona.style.trim() && persona.traits.length && persona.interests.length)
+  const urls = Object.values(links).map((value) => value.trim()).filter(Boolean)
   const change = <K extends keyof Persona>(key: K, value: Persona[K]) => setPersona(current => ({ ...current, [key]: value }))
-  return <main className="min-h-screen bg-background"><header className="mx-auto flex max-w-6xl items-center justify-between px-5 py-6 sm:px-8"><button onClick={back} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ChevronLeft size={17} /> Back</button><Logo /><Stepper step={user === 'a' ? 'profile-a' : 'profile-b'} /></header><div className="mx-auto max-w-6xl px-5 pb-16 pt-6 sm:px-8"><div className="mb-8 max-w-2xl"><p className="mb-2 text-xs font-semibold uppercase tracking-[.18em] text-primary">{user === 'a' ? 'Person one' : 'Person two'}</p><h1 className="text-4xl font-semibold tracking-tight">Review {user === 'a' ? 'the first' : 'the second'} personality.</h1><p className="mt-2 text-muted-foreground">Enter only present, owner-confirmed information. The app does not scan profile links or connect to external dating services.</p></div><div className="grid gap-6 lg:grid-cols-[1.1fr_.9fr]"><form onSubmit={event => { event.preventDefault(); if (isValid) next(persona) }} className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-8"><div className="grid gap-5"><label htmlFor={`name-${user}`}><span className="text-sm font-semibold">Name</span><input id={`name-${user}`} required maxLength={80} value={persona.name} onChange={event => change('name', event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none ring-primary focus:ring-2" /></label><label htmlFor={`bio-${user}`}><span className="text-sm font-semibold">Bio</span><span className="mt-1 block text-xs text-muted-foreground">A short, factual self-description.</span><textarea id={`bio-${user}`} required maxLength={600} rows={4} value={persona.bio} onChange={event => change('bio', event.target.value)} className="mt-2 w-full resize-y rounded-xl border border-border bg-background p-3 text-sm outline-none ring-primary focus:ring-2" /></label><div className="grid gap-5 sm:grid-cols-2"><CsvField id={`traits-${user}`} label="Traits" hint="Comma-separated, for example: warm, direct" value={persona.traits} onChange={items => change('traits', items)} /><CsvField id={`interests-${user}`} label="Interests" hint="Comma-separated conversation material" value={persona.interests} onChange={items => change('interests', items)} /></div><label htmlFor={`style-${user}`}><span className="text-sm font-semibold">Conversation style</span><span className="mt-1 block text-xs text-muted-foreground">Describe tone, pacing, humor, and message length.</span><textarea id={`style-${user}`} required maxLength={400} rows={3} value={persona.style} onChange={event => change('style', event.target.value)} className="mt-2 w-full resize-y rounded-xl border border-border bg-background p-3 text-sm outline-none ring-primary focus:ring-2" /></label></div><div className="mt-8 flex justify-end"><Button type="submit" disabled={!isValid}>Confirm this snapshot <ArrowRight size={17} /></Button></div></form><ProfilePreview persona={persona} user={user} /></div></div></main>
+  const changeLink = (platform: keyof SocialLinks, value: string) => setLinks(current => ({ ...current, [platform]: value }))
+
+  const importProfiles = async () => {
+    setImporting(true)
+    setImportError('')
+    setImportStatus('')
+    try {
+      const response = await fetch('/api/profiles/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urls, personaSlot: user, consent, ...(userId ? { userId } : {}) }),
+      })
+      const data = await response.json().catch(() => ({})) as ImportResponse
+      if (!response.ok || !data.userId) {
+        throw new Error(data.error ?? 'Unable to import these social profiles.')
+      }
+      setUserId(data.userId)
+      setImportStatus(`Stored ${data.storedProfileCount ?? urls.length} profiles, ${data.storedPostCount ?? 0} posts, and ${data.storedCommentCount ?? 0} comments under ${data.userId}. Re-importing updates these records without duplicates.`)
+    } catch (reason) {
+      setImportError(reason instanceof Error ? reason.message : 'Unable to import these social profiles.')
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  return (
+    <main className="min-h-screen bg-background">
+      <header className="mx-auto flex max-w-6xl items-center justify-between px-5 py-6 sm:px-8">
+        <button onClick={back} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ChevronLeft size={17} /> Back</button>
+        <Logo />
+        <Stepper step={user === 'a' ? 'profile-a' : 'profile-b'} />
+      </header>
+      <div className="mx-auto max-w-6xl px-5 pb-16 pt-6 sm:px-8">
+        <div className="mb-8 max-w-2xl">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[.18em] text-primary">{user === 'a' ? 'Person one' : 'Person two'}</p>
+          <h1 className="text-4xl font-semibold tracking-tight">Review {user === 'a' ? 'the first' : 'the second'} personality.</h1>
+          <p className="mt-2 text-muted-foreground">Store owner-approved social data in MongoDB. The personality fields stay entirely user-authored.</p>
+        </div>
+        <div className="grid gap-6 lg:grid-cols-[1.1fr_.9fr]">
+          <form onSubmit={event => { event.preventDefault(); if (isValid) next(persona) }} className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-8">
+            <section className="mb-7 rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-5">
+              <div className="flex items-start gap-3">
+                <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground"><Link2 size={17} /></span>
+                <div><h2 className="font-semibold">Store social profiles</h2><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Add one profile per platform. This stores raw profile data, posts, and comments without changing the personality below or creating duplicates.</p></div>
+              </div>
+              <div className="mt-4 grid gap-3">
+                {([
+                  ['linkedin', 'LinkedIn profile URL', 'https://www.linkedin.com/in/username'],
+                  ['instagram', 'Instagram profile URL', 'https://www.instagram.com/username'],
+                  ['x', 'X profile URL', 'https://x.com/username'],
+                ] as const).map(([platform, label, placeholder]) => (
+                  <label key={platform} htmlFor={`${platform}-${user}`}>
+                    <span className="text-xs font-semibold">{label}</span>
+                    <input id={`${platform}-${user}`} type="url" value={links[platform]} onChange={event => changeLink(platform, event.target.value)} placeholder={placeholder} className="mt-1.5 h-10 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none ring-primary focus:ring-2" />
+                  </label>
+                ))}
+              </div>
+              <label className="mt-4 flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
+                <input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} className="mt-0.5 size-4 accent-primary" />
+                I own these profiles or have permission to import their public data.
+              </label>
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <Button onClick={importProfiles} disabled={!urls.length || !consent || importing}>{importing ? 'Storing profiles…' : 'Store social data'} <Database size={16} /></Button>
+                <span className="text-xs text-muted-foreground">{urls.length}/3 links ready</span>
+              </div>
+              {importStatus && <p role="status" className="mt-4 rounded-xl bg-emerald-500/10 p-3 text-xs leading-relaxed text-emerald-700 dark:text-emerald-300">{importStatus}</p>}
+              {importError && <p role="alert" className="mt-4 rounded-xl bg-destructive/10 p-3 text-xs leading-relaxed text-destructive">{importError}</p>}
+            </section>
+            <div className="grid gap-5">
+              <label htmlFor={`name-${user}`}><span className="text-sm font-semibold">Name</span><input id={`name-${user}`} required maxLength={80} value={persona.name} onChange={event => change('name', event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none ring-primary focus:ring-2" /></label>
+              <label htmlFor={`bio-${user}`}><span className="text-sm font-semibold">Bio</span><span className="mt-1 block text-xs text-muted-foreground">A short, factual self-description.</span><textarea id={`bio-${user}`} required maxLength={600} rows={4} value={persona.bio} onChange={event => change('bio', event.target.value)} className="mt-2 w-full resize-y rounded-xl border border-border bg-background p-3 text-sm outline-none ring-primary focus:ring-2" /></label>
+              <div className="grid gap-5 sm:grid-cols-2"><CsvField id={`traits-${user}`} label="Traits" hint="Comma-separated, for example: warm, direct" value={persona.traits} onChange={items => change('traits', items)} /><CsvField id={`interests-${user}`} label="Interests" hint="Comma-separated conversation material" value={persona.interests} onChange={items => change('interests', items)} /></div>
+              <label htmlFor={`style-${user}`}><span className="text-sm font-semibold">Conversation style</span><span className="mt-1 block text-xs text-muted-foreground">Describe tone, pacing, humor, and message length.</span><textarea id={`style-${user}`} required maxLength={400} rows={3} value={persona.style} onChange={event => change('style', event.target.value)} className="mt-2 w-full resize-y rounded-xl border border-border bg-background p-3 text-sm outline-none ring-primary focus:ring-2" /></label>
+            </div>
+            <div className="mt-8 flex justify-end"><Button type="submit" disabled={!isValid}>Confirm this snapshot <ArrowRight size={17} /></Button></div>
+          </form>
+          <ProfilePreview persona={persona} user={user} />
+        </div>
+      </div>
+    </main>
+  )
 }
 
 function VerdictCard({ person, verdict }: { person: Persona; verdict: CompatibilityVerdict }) {
