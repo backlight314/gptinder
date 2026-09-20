@@ -138,7 +138,7 @@ export const personaSpeakerSchema = z.object({
     'ask_question',
     'unknown',
   ]),
-  text: z.string().min(1).max(500),
+  text: z.string().min(1).max(800),
   usedProfileEvidence: z.array(z.string()).min(1).max(20),
   usedInterpretationSignals: z.array(z.string()).max(20),
   lensUsage: z.object({
@@ -157,6 +157,7 @@ export const compatibilityAnalysisSchema = z.object({
   reciprocity: z.enum(['strong', 'mixed', 'weak']),
   pacing: z.enum(['aligned', 'mixed', 'mismatched']),
   connection: z.enum(['present', 'uncertain', 'absent']),
+  sharedGround: z.enum(['meaningful', 'limited', 'unclear']),
   rationale: z.string().min(1).max(400),
 })
 
