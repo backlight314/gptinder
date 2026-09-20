@@ -3,6 +3,7 @@ import { ArrowUpRight, Search, Usb, Users, ArrowRight } from 'lucide-react'
 import InteractiveHeart from '@/components/interactive-heart'
 import SiteNav from '@/components/site-nav'
 import ProfileAvatar from '@/components/profile-avatar'
+import DemoReset from '@/components/demo-reset'
 import { listPublicProfiles } from '@/lib/airos-directory-store'
 
 export const dynamic = 'force-dynamic'
@@ -54,7 +55,7 @@ export default async function DirectoryPage({ searchParams }: Props) {
         </div>
         {pages > 1 && <nav aria-label="Directory pages" className="pagination"><Link aria-disabled={directory.page <= 1} className={directory.page <= 1 ? 'pointer-events-none opacity-40' : ''} href={`/?${new URLSearchParams({ ...(query ? { q: query } : {}), page: String(directory.page - 1) })}`}>← Previous</Link><span>{directory.page} / {pages}</span><Link aria-disabled={directory.page >= pages} className={directory.page >= pages ? 'pointer-events-none opacity-40' : ''} href={`/?${new URLSearchParams({ ...(query ? { q: query } : {}), page: String(directory.page + 1) })}`}>Next →</Link></nav>}
       </section>
-      <footer className="site-footer shell"><span>hack the heart.</span><p>Less scrolling. More connecting.</p><InteractiveHeart label="Send love from the footer" /></footer>
+      <footer className="site-footer shell"><span>hack the heart.</span><p>Less scrolling. More connecting.</p><div className="footer-actions"><DemoReset /><InteractiveHeart label="Send love from the footer" /></div></footer>
     </main>
   )
 }

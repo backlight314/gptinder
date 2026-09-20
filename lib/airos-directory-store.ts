@@ -320,12 +320,12 @@ export const getPublicProfile = cache(async (badgeIdValue: string): Promise<Publ
     return database.collection(name!).findOne({ $or: [
       { userId: profile.userId },
       ...(urls.length ? [{ sourceUrl: { $in: urls } }, { url: { $in: urls } }, { linkedinUrl: { $in: urls } }] : []),
-    ] }, { projection: { avatarUrl: 1, profilePicUrlHD: 1, profilePicUrl: 1, profilePicture: 1, photo: 1, profile_image_url_https: 1, profile_image_url: 1 } })
+    ] }, { projection: { avatarUrl: 1, profilePicUrlHD: 1, profilePicUrl: 1, profilePicture: 1, photo: 1, profile_image_url_https: 1, profile_image_url: 1, cachedAvatar: 1 } })
   }))
-  const photoUrls = socialProfiles.map(profilePhoto).filter((url): url is string => Boolean(url))
+  const hasPhoto = socialProfiles.some((socialProfile) => Boolean(socialProfile && ('cachedAvatar' in socialProfile || profilePhoto(socialProfile))))
   return {
-    avatarUrl: photoUrls[0] || null,
-    avatarAlternatives: photoUrls.slice(1),
+    avatarUrl: hasPhoto ? `/api/airos/profiles/${encodeURIComponent(profile.badgeId)}/photo` : null,
+    avatarAlternatives: [],
     badgeId: profile.badgeId,
     name: profile.name,
     email: profile.email || null,

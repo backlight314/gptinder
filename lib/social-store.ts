@@ -82,9 +82,23 @@ export async function storeSocialImport(payload: SocialImportPayload, requestedU
     : existingProfile?._id
       ? { _id: existingProfile._id }
       : { userId }
+  const profileFields: Record<string, unknown> = {
+    ...rawProfile,
+    avatarUrl: payload.profile.avatarUrl,
+    userId,
+    syncedAt: now,
+  }
+  if (payload.profileImage) {
+    profileFields.cachedAvatar = {
+      contentType: payload.profileImage.contentType,
+      data: Buffer.from(payload.profileImage.bytes).toString('base64'),
+      sourceUrl: payload.profileImage.sourceUrl,
+      cachedAt: now,
+    }
+  }
   const profileResult = await profileCollection.findOneAndUpdate(
     profileFilter,
-    { $set: { ...rawProfile, avatarUrl: payload.profile.avatarUrl, userId, syncedAt: now } },
+    { $set: profileFields },
     { upsert: true, returnDocument: 'after' },
   )
   if (!profileResult) throw new Error('MongoDB did not return the stored platform profile')

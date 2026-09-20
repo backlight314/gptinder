@@ -2,6 +2,7 @@ import 'server-only'
 
 import { createHash } from 'node:crypto'
 import { SocialImportError } from '@/lib/social-errors'
+import { SAFE_PROFILE_IMAGE_TYPES } from '@/lib/profile-photo'
 import type {
   NormalizedProfileSection,
   NormalizedSocialComment,
@@ -299,9 +300,10 @@ async function downloadImage(url: string | null): Promise<ProfileImageAsset | nu
     if (!response.ok) return null
     const contentType = response.headers.get('content-type') || ''
     const declaredSize = Number(response.headers.get('content-length') || '0')
-    if (!contentType.startsWith('image/') || declaredSize > 5_000_000) return null
+    const normalizedType = contentType.split(';', 1)[0]?.trim().toLowerCase() || ''
+    if (!SAFE_PROFILE_IMAGE_TYPES.has(normalizedType) || declaredSize > 5_000_000) return null
     const bytes = new Uint8Array(await response.arrayBuffer())
-    return bytes.length > 0 && bytes.length <= 5_000_000 ? { sourceUrl: url, contentType, bytes } : null
+    return bytes.length > 0 && bytes.length <= 5_000_000 ? { sourceUrl: url, contentType: normalizedType, bytes } : null
   } catch {
     return null
   }
