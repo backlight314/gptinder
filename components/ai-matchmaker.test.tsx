@@ -34,6 +34,7 @@ it('loads stored profiles, selects one, and keeps URL import available', async (
   fireEvent.click(screen.getByText('Stored Person'))
   expect(screen.getByDisplayValue('Stored Person')).toBeInTheDocument()
   expect(screen.getByDisplayValue('Likes long walks and board games.')).toBeInTheDocument()
+  expect(screen.getByText('curious · board games')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: /save selected profile/i })).toBeEnabled()
 
   fireEvent.click(screen.getByRole('button', { name: /import a different profile from urls/i }))
