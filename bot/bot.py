@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 
 import aiohttp
@@ -85,6 +86,22 @@ def persona_summary(persona: dict) -> str:
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
+log = logging.getLogger("gptinder.bot")
+
+
+@bot.event
+async def on_command(ctx: commands.Context):
+    # Ids and the command name only, never message text.
+    log.info("command !%s from user %s in channel %s", ctx.command, ctx.author.id, ctx.channel.id)
+
+
+@bot.event
+async def on_command_error(ctx: commands.Context, error: commands.CommandError):
+    if isinstance(error, commands.CommandNotFound):
+        return
+    log.error("command !%s failed: %s: %s", ctx.command, type(error).__name__, error)
+    if ctx.command is None or not ctx.command.has_error_handler():
+        await ctx.reply("That command failed - check the bot logs.")
 
 
 @bot.command(name="export")
