@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { ArrowRight, Check, ChevronLeft, Database, Heart, Link2, ListOrdered, MessageCircle, RefreshCw, Sparkles, Stars, ThumbsDown, ThumbsUp, UserRound, Zap } from 'lucide-react'
+import ProfileAvatar from './profile-avatar'
 
 type PersonKey = 'a' | 'b'
 type Persona = {
@@ -25,25 +26,24 @@ type ImportResponse = {
   storedProfileCount?: number
   storedPostCount?: number
   storedCommentCount?: number
-  agentContext?: AgentContextView
   error?: string
 }
 type PersonaSaveResponse = {
   userId?: string
   personaId?: string
   revision?: number
-  agentContext?: AgentContextView
   error?: string
 }
-type AgentContextView = {
-  revision: number
-  compiledPrompt: string
-  sourceEvidenceIds: string[]
-  sourceStats: Array<{ source: string; documentsRead: number; documentsIncluded: number; charactersIncluded: number; truncated: boolean }>
-  builtAt: string
-  updatedAt: string
+type StoredProfile = Persona & {
+  userId: string
+  badgeId: string | null
+  role: string | null
+  avatarUrl: string | null
+  source: 'badge_import' | 'persona'
 }
+type PersonaListResponse = { profiles?: StoredProfile[]; error?: string }
 type SocialLinks = { linkedin: string; instagram: string; x: string }
+type ProfileMode = 'stored' | 'new'
 type Step = 'landing' | 'profile-a' | 'profile-b' | 'date' | 'log'
 
 const starterPersonas: Record<PersonKey, Persona> = {
@@ -81,28 +81,84 @@ function ProfilePreview({ persona, user }: { persona: Persona; user: PersonKey }
   return <aside className="rounded-3xl border border-primary/20 bg-primary/5 p-5 sm:p-6"><p className="text-xs font-semibold uppercase tracking-[.18em] text-primary">Stored agent snapshot</p><div className="mt-4 flex items-center gap-3"><Avatar person={persona} size="md" /><div><p className="font-semibold">{persona.name || `Person ${user === 'a' ? 'one' : 'two'}`}</p><p className="text-xs text-muted-foreground">Saved to MongoDB when you confirm this form.</p></div></div><dl className="mt-5 space-y-4 text-sm"><div><dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Bio</dt><dd className="mt-1 leading-relaxed">{persona.bio || 'Add a concise description.'}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Traits</dt><dd className="mt-2 flex flex-wrap gap-2">{persona.traits.length ? persona.traits.map(item => <span key={item} className="rounded-full bg-card px-2.5 py-1 text-xs font-medium">{item}</span>) : 'Add traits.'}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Interests</dt><dd className="mt-2 flex flex-wrap gap-2">{persona.interests.length ? persona.interests.map(item => <span key={item} className="rounded-full bg-card px-2.5 py-1 text-xs font-medium">{item}</span>) : 'Add interests.'}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Conversation style</dt><dd className="mt-1 leading-relaxed">{persona.style || 'Describe their voice and pacing.'}</dd></div></dl></aside>
 }
 
-function AgentContextPanel({ context, rebuilding, error, onRebuild }: { context: AgentContextView; rebuilding: boolean; error: string; onRebuild: () => void }) {
-  return <section className="mb-7 rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">Agent prompt</p><h2 className="mt-1 font-semibold">Context revision {context.revision}</h2><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Built {new Date(context.builtAt).toLocaleString()}. Profile and import edits are included only when you rebuild.</p></div><Button variant="secondary" onClick={onRebuild} disabled={rebuilding}>{rebuilding ? 'Rebuilding…' : 'Rebuild my agent prompt'} <RefreshCw size={15} /></Button></div><div className="mt-4 grid gap-2 sm:grid-cols-2">{context.sourceStats.map(stat => <div className="rounded-xl border border-border bg-card/80 p-3 text-xs" key={stat.source}><div className="flex items-center justify-between gap-2"><span className="font-semibold">{stat.source.replace(/([A-Z])/g, ' $1')}</span>{stat.truncated && <span className="text-muted-foreground">shortened</span>}</div><p className="mt-1 text-muted-foreground">{stat.documentsIncluded} included of {stat.documentsRead} read · {stat.charactersIncluded} characters</p></div>)}</div><details className="mt-4"><summary className="cursor-pointer text-xs font-semibold">Preview compiled prompt</summary><pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-xl border border-border bg-background p-3 text-xs leading-relaxed text-muted-foreground">{context.compiledPrompt}</pre></details>{error && <p role="alert" className="mt-3 rounded-xl bg-destructive/10 p-3 text-xs text-destructive">{error}</p>}</section>
+function StoredProfileCard({ profile, selected, onSelect }: { profile: StoredProfile; selected: boolean; onSelect: () => void }) {
+  const role = profile.role || 'Hack the North participant'
+  return <button type="button" aria-pressed={selected} onClick={onSelect} className={`rounded-2xl border p-3 text-left transition-all hover:-translate-y-0.5 hover:border-primary/40 ${selected ? 'border-primary bg-primary/8 shadow-sm' : 'border-border bg-card'}`}>
+    <div className="flex items-center gap-3"><ProfileAvatar name={profile.name} src={profile.avatarUrl} /><div className="min-w-0"><p className="truncate text-sm font-semibold">{profile.name}</p><p className="truncate text-xs text-muted-foreground">{role}</p></div></div>
+    {profile.badgeId && <p className="mt-3 truncate font-mono text-[10px] text-muted-foreground">{profile.badgeId}</p>}
+    <p className="mt-3 text-[10px] font-semibold uppercase tracking-wider text-primary">{selected ? 'Selected' : 'Use this profile'}</p>
+  </button>
 }
 
 function Profile({ user, initial, initialUserId, next, onUserId, back }: { user: PersonKey; initial: Persona; initialUserId?: string; next: (persona: Persona, userId: string) => void; onUserId: (userId: string) => void; back: () => void }) {
   const [persona, setPersona] = useState(initial)
   const [links, setLinks] = useState<SocialLinks>({ linkedin: '', instagram: '', x: '' })
+  const [storedProfiles, setStoredProfiles] = useState<StoredProfile[]>([])
+  const [loadingStored, setLoadingStored] = useState(true)
+  const [storedError, setStoredError] = useState('')
+  const [mode, setMode] = useState<ProfileMode>(initialUserId ? 'stored' : 'new')
   const [consent, setConsent] = useState(false)
   const [importing, setImporting] = useState(false)
   const [importError, setImportError] = useState('')
   const [importStatus, setImportStatus] = useState('')
   const [saveError, setSaveError] = useState('')
   const [saving, setSaving] = useState(false)
-  const [agentContext, setAgentContext] = useState<AgentContextView | null>(null)
-  const [rebuildingContext, setRebuildingContext] = useState(false)
-  const [contextError, setContextError] = useState('')
   const [userId, setUserId] = useState<string | undefined>(initialUserId)
   const isValid = Boolean(persona.name.trim() && persona.bio.trim() && persona.style.trim() && persona.traits.length && persona.interests.length && persona.values.length)
   const urls = Object.values(links).map((value) => value.trim()).filter(Boolean)
   const linksNeedImport = urls.length > 0 && !userId
   const change = <K extends keyof Persona>(key: K, value: Persona[K]) => setPersona(current => ({ ...current, [key]: value }))
   const changeLink = (platform: keyof SocialLinks, value: string) => setLinks(current => ({ ...current, [platform]: value }))
+
+  useEffect(() => {
+    let active = true
+    setLoadingStored(true)
+    setStoredError('')
+    fetch(`/api/personas?slot=${user}`, { cache: 'no-store' })
+      .then(async response => {
+        const data = await response.json().catch(() => ({})) as PersonaListResponse
+        if (!response.ok) throw new Error(data.error ?? 'Unable to load stored profiles.')
+        if (active) setStoredProfiles(data.profiles ?? [])
+      })
+      .catch(reason => {
+        if (active) setStoredError(reason instanceof Error ? reason.message : 'Unable to load stored profiles.')
+      })
+      .finally(() => { if (active) setLoadingStored(false) })
+    return () => { active = false }
+  }, [user])
+
+  const selectStoredProfile = (profile: StoredProfile) => {
+    setMode('stored')
+    setPersona({
+      name: profile.name,
+      bio: profile.bio,
+      traits: [...profile.traits],
+      interests: [...profile.interests],
+      style: profile.style,
+      values: [...profile.values],
+      lifeGoals: { ...profile.lifeGoals },
+      relationshipPreferences: { ...profile.relationshipPreferences },
+    })
+    setUserId(profile.userId)
+    onUserId(profile.userId)
+    setLinks({ linkedin: '', instagram: '', x: '' })
+    setConsent(false)
+    setImportError('')
+    setImportStatus('')
+    setSaveError('')
+  }
+
+  const startNewProfile = () => {
+    setMode('new')
+    setPersona({ ...starterPersonas[user], lifeGoals: { ...starterPersonas[user].lifeGoals }, relationshipPreferences: { ...starterPersonas[user].relationshipPreferences }, traits: [], interests: [], values: [] })
+    setUserId(undefined)
+    onUserId('')
+    setLinks({ linkedin: '', instagram: '', x: '' })
+    setConsent(false)
+    setImportError('')
+    setImportStatus('')
+    setSaveError('')
+  }
 
   const importProfiles = async () => {
     setImporting(true)
@@ -120,7 +176,6 @@ function Profile({ user, initial, initialUserId, next, onUserId, back }: { user:
       }
       setUserId(data.userId)
       onUserId(data.userId)
-      if (data.agentContext) setAgentContext(data.agentContext)
       setImportStatus(`Stored ${data.storedProfileCount ?? urls.length} profiles, ${data.storedPostCount ?? 0} posts, and ${data.storedCommentCount ?? 0} comments under ${data.userId}. Re-importing updates these records without duplicates.`)
     } catch (reason) {
       setImportError(reason instanceof Error ? reason.message : 'Unable to import these social profiles.')
@@ -142,27 +197,11 @@ function Profile({ user, initial, initialUserId, next, onUserId, back }: { user:
       if (!response.ok || !data.userId) throw new Error(data.error ?? 'Unable to save this persona.')
       setUserId(data.userId)
       onUserId(data.userId)
-      if (data.agentContext) setAgentContext(data.agentContext)
       next(persona, data.userId)
     } catch (reason) {
       setSaveError(reason instanceof Error ? reason.message : 'Unable to save this persona.')
     } finally {
       setSaving(false)
-    }
-  }
-
-  const rebuildAgentContext = async () => {
-    setRebuildingContext(true)
-    setContextError('')
-    try {
-      const response = await fetch('/api/agent-contexts/rebuild', { method: 'POST' })
-      const data = await response.json().catch(() => ({})) as { agentContext?: AgentContextView; error?: string }
-      if (!response.ok || !data.agentContext) throw new Error(data.error ?? 'Unable to rebuild the agent prompt.')
-      setAgentContext(data.agentContext)
-    } catch (reason) {
-      setContextError(reason instanceof Error ? reason.message : 'Unable to rebuild the agent prompt.')
-    } finally {
-      setRebuildingContext(false)
     }
   }
 
@@ -179,11 +218,19 @@ function Profile({ user, initial, initialUserId, next, onUserId, back }: { user:
         <div className="mb-8 max-w-2xl">
           <p className="mb-2 text-xs font-semibold uppercase tracking-[.18em] text-primary">{user === 'a' ? 'Person one' : 'Person two'}</p>
           <h1 className="text-4xl font-semibold tracking-tight">Review {user === 'a' ? 'the first' : 'the second'} personality.</h1>
-          <p className="mt-2 text-muted-foreground">Store owner-approved social data in MongoDB. The personality fields stay entirely user-authored.</p>
+          <p className="mt-2 text-muted-foreground">Choose someone already in the directory, or import a new profile. The personality fields stay entirely user-authored.</p>
         </div>
+        <section className="mb-7 rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-7">
+          <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[.18em] text-primary">Choose a person</p><h2 className="mt-2 text-xl font-semibold">{user === 'a' ? 'Person one' : 'Person two'} from your stored profiles</h2><p className="mt-1 text-xs text-muted-foreground">These cards use the same people and badge identities as the home directory.</p></div><Button variant={mode === 'new' ? 'primary' : 'secondary'} onClick={startNewProfile}><Link2 size={16} /> Import a new profile</Button></div>
+          {loadingStored && <p className="mt-5 text-sm text-muted-foreground">Loading stored profiles…</p>}
+          {storedError && <p role="alert" className="mt-5 rounded-xl bg-destructive/10 p-3 text-xs text-destructive">{storedError}</p>}
+          {!loadingStored && !storedError && storedProfiles.length === 0 && <p className="mt-5 rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">No stored profiles yet. Import a new profile to get started.</p>}
+          {!loadingStored && storedProfiles.length > 0 && <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{storedProfiles.map(profile => <StoredProfileCard key={`${profile.userId}-${profile.badgeId ?? 'persona'}`} profile={profile} selected={mode === 'stored' && profile.userId === userId} onSelect={() => selectStoredProfile(profile)} />)}</div>}
+          {mode === 'new' && <p className="mt-4 text-xs text-muted-foreground">New profile mode is active. Add the required URLs and personality details below.</p>}
+        </section>
         <div className="grid gap-6 lg:grid-cols-[1.1fr_.9fr]">
           <form onSubmit={event => { event.preventDefault(); if (isValid && !saving) void savePersona() }} className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-8">
-            <section className="mb-7 rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-5">
+            {mode === 'new' ? <section className="mb-7 rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-5">
               <div className="flex items-start gap-3">
                 <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground"><Link2 size={17} /></span>
                 <div><h2 className="font-semibold">Store social profiles</h2><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Add one profile per platform. This stores raw profile data, posts, and comments without changing the personality below or creating duplicates.</p></div>
@@ -210,8 +257,7 @@ function Profile({ user, initial, initialUserId, next, onUserId, back }: { user:
               </div>
               {importStatus && <p role="status" className="mt-4 rounded-xl bg-emerald-500/10 p-3 text-xs leading-relaxed text-emerald-700 dark:text-emerald-300">{importStatus}</p>}
               {importError && <p role="alert" className="mt-4 rounded-xl bg-destructive/10 p-3 text-xs leading-relaxed text-destructive">{importError}</p>}
-            </section>
-            {agentContext && <AgentContextPanel context={agentContext} rebuilding={rebuildingContext} error={contextError} onRebuild={() => { void rebuildAgentContext() }} />}
+            </section> : <section className="mb-7 rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-5"><div className="flex items-start gap-3"><span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground"><Check size={17} /></span><div><h2 className="font-semibold">Stored profile selected</h2><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Review or edit the personality fields below, then save this profile for {user === 'a' ? 'person one' : 'person two'}.</p></div></div><button type="button" onClick={startNewProfile} className="mt-4 text-xs font-semibold text-primary hover:underline">Import a different profile from URLs</button></section>}
             <div className="grid gap-5">
               <label htmlFor={`name-${user}`}><span className="text-sm font-semibold">Name</span><input id={`name-${user}`} required maxLength={80} value={persona.name} onChange={event => change('name', event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none ring-primary focus:ring-2" /></label>
               <label htmlFor={`bio-${user}`}><span className="text-sm font-semibold">Bio</span><span className="mt-1 block text-xs text-muted-foreground">A short, factual self-description.</span><textarea id={`bio-${user}`} required maxLength={600} rows={4} value={persona.bio} onChange={event => change('bio', event.target.value)} className="mt-2 w-full resize-y rounded-xl border border-border bg-background p-3 text-sm outline-none ring-primary focus:ring-2" /></label>
@@ -231,7 +277,7 @@ function Profile({ user, initial, initialUserId, next, onUserId, back }: { user:
             </div>
             {saveError && <p role="alert" className="mt-5 rounded-xl bg-destructive/10 p-3 text-xs leading-relaxed text-destructive">{saveError}</p>}
             {linksNeedImport && <p className="mt-5 rounded-xl bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-700 dark:text-amber-300">Social links are entered but not imported yet. You can save this persona now; use Store social data to attach them to the same user record later.</p>}
-            <div className="mt-8 flex justify-end"><Button type="submit" disabled={!canSave}>{saving ? 'Saving persona…' : 'Save persona and continue'} <ArrowRight size={17} /></Button></div>
+            <div className="mt-8 flex justify-end"><Button type="submit" disabled={!canSave}>{saving ? 'Saving persona…' : mode === 'stored' ? 'Save selected profile and continue' : 'Save persona and continue'} <ArrowRight size={17} /></Button></div>
           </form>
           <ProfilePreview persona={persona} user={user} />
         </div>
@@ -240,7 +286,7 @@ function Profile({ user, initial, initialUserId, next, onUserId, back }: { user:
   )
 }
 
-type AgentMessage = { _id: string; sequence: number; speakerKey: PersonKey; action: string; text: string; agentContextRevision?: number; voicePromptId?: string }
+type AgentMessage = { _id: string; sequence: number; speakerKey: PersonKey; action: string; text: string; voicePromptId?: string }
 type Interpretation = {
   literalMeaning: string
   possibleIntent: string
@@ -452,7 +498,7 @@ export default function AIMatchmaker() {
     setStep(user === 'a' ? 'profile-b' : 'date')
   }
   const rememberUserId = (user: PersonKey) => (userId: string) => {
-    setUserIds(current => ({ ...current, [user]: userId }))
+    setUserIds(current => ({ ...current, [user]: userId || undefined }))
   }
   const openLog = () => {
     setOpenEncounterId(null)
