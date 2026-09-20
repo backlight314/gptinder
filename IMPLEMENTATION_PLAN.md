@@ -20,8 +20,10 @@ simulation layer.
 4. **Two-agent simulator and verdict (implemented).** Keep credentials server-side; give
    each agent its own persona and the shared transcript; alternate turns;
    then let each agent independently assess the completed conversation. Display
-   both perspectives and their server-calculated average score. It is a
-   contained simulation and cannot send messages externally.
+   both perspectives and their server-calculated average score. The simulator
+   supports a natural scenario and a civil built-in-friction scenario so poor
+   chemistry, disagreement, and failure to connect are represented as valid
+   outcomes. It is a contained simulation and cannot send messages externally.
 5. **Evaluation.** Build a small review set of persona prompts and assess
    faithfulness, factuality, tone, safety, and cost. Improve prompt/context
    retrieval before considering fine-tuning.
@@ -33,11 +35,15 @@ simulation layer.
 
 1. The date screen posts the two profile snapshots to
    `/api/match/conversation`.
-2. The server alternates six Responses API calls, passing the transcript to
-   the next speaker on each turn.
+2. The server alternates exactly six Responses API calls, passing the transcript
+   to the next speaker on each turn.
 3. After the final turn, each agent retrieves only its own persona context and
-   returns a structured, grounded verdict. The server averages the two scores.
-4. The server returns the transcript, verdicts, and combined score for the UI
+   returns a structured, grounded analysis of compatibility, friction,
+   reciprocity, pacing, and connection. The analysis then produces one of four
+   meeting-intent states: `agreed`, `interested`, `declined`, or `unclear`.
+4. The server averages the two model scores, preserves the analyzed signals,
+   and guarantees that mutual explicit agreement cannot produce a zero score.
+5. The server returns the transcript, verdicts, meeting intent, and combined score for the UI
    to render. If either verdict fails, it returns the transcript and an
    unavailable-verdict state instead. No external message is sent or stored.
 
