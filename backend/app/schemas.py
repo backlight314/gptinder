@@ -94,8 +94,13 @@ class ScoreResponse(BaseModel):
     breakdown: ScoreBreakdown
 
 
+# Caps shared by every raw-message source (Discord, WhatsApp).
+MAX_MESSAGE_CHARS = 4000
+MAX_MESSAGES_PER_REQUEST = 10_000
+
+
 class DiscordMessage(BaseModel):
-    content: str = Field(max_length=4000)
+    content: str = Field(max_length=MAX_MESSAGE_CHARS)
     timestamp: datetime
     message_id: str | None = Field(default=None, min_length=1, max_length=128)
 
@@ -103,10 +108,28 @@ class DiscordMessage(BaseModel):
 class DiscordIngestRequest(BaseModel):
     user_id: str = Field(pattern=r"^\d{1,25}$")
     source: Literal["discord"]
-    messages: list[DiscordMessage] = Field(max_length=10_000)
+    messages: list[DiscordMessage] = Field(max_length=MAX_MESSAGES_PER_REQUEST)
 
 
 class DiscordIngestResponse(BaseModel):
     user_id: str
     added: int
     total: int
+
+
+class WhatsAppIngestRequest(BaseModel):
+    user_id: str = Field(pattern=r"^[A-Za-z0-9-]{1,64}$")
+    display_name: str = Field(min_length=1, max_length=100)
+    export_text: str  # size is checked in the route so a 422 never echoes the whole export back
+    date_order: Literal["dmy", "mdy"] | None = None
+
+
+class WhatsAppIngestResponse(BaseModel):
+    user_id: str
+    added: int
+    total: int
+    parsed: int  # the user's own messages found in the export
+    date_order: Literal["dmy", "mdy"]
+    date_order_guessed: bool
+    truncated_messages: int  # over-long messages shortened to MAX_MESSAGE_CHARS
+    dropped_oldest: int  # own messages beyond MAX_MESSAGES_PER_REQUEST (the oldest are dropped)
