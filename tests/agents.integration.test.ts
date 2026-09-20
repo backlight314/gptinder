@@ -36,6 +36,13 @@ vi.mock('@/lib/agents/openai', () => ({
     usedInterpretationSignals: interpretation ? [interpretation.recommendedApproach] : [],
     lensUsage: { behavior: [], interpersonal: [], attachmentRegulation: [], values: [] },
   })),
+  assessConversation: vi.fn(async () => ({
+    summary: 'The short exchange is inconclusive.',
+    strengths: ['Both agents responded to the conversation.'],
+    considerations: ['The short exchange does not establish a meeting plan.'],
+    analysis: { compatibility: 'mixed', friction: 'low', reciprocity: 'mixed', pacing: 'mixed', connection: 'uncertain', rationale: 'The transcript provides mixed evidence.' },
+    meetingIntent: 'unclear',
+  })),
   buildReactionAdaptation: vi.fn(async ({ outcome, messages }) => ({
     reactionBias: outcome === 'positive' ? 'more_positive' : 'more_negative',
     guidance: 'Tentatively adjust reactions to similar quiet invitations, without assuming what caused the reported outcome.',
