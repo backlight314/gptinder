@@ -1,10 +1,16 @@
 import type { FrozenProfile } from './schemas'
+import { finalizeVerdictScores, type CompatibilityVerdict, type MeetingIntent } from '@/lib/compatibility'
+
+type ScoredVerdict = CompatibilityVerdict & { score: number }
 
 export type CompatibilityResult = {
-  label: 'App compatibility score'
+  label: 'App compatibility score' | 'Conversation analysis score'
   score: number | null
   coverage: number
-  features: Array<{ key: string; outcome: 'aligned' | 'different' | 'unknown'; detail: string }>
+  features: Array<{ key: string; outcome: string; detail: string }>
+  scenario?: 'natural' | 'friction'
+  meetingIntent?: MeetingIntent | null
+  verdicts?: { a: ScoredVerdict; b: ScoredVerdict } | null
 }
 
 function value(profile: FrozenProfile, group: 'explicitLifeGoals' | 'relationshipPreferences', key: string) {
@@ -34,4 +40,25 @@ export function calculateCompatibility(a: FrozenProfile, b: FrozenProfile): Comp
   }
   const score = known.length ? Math.round(((aligned + (sharedValues.length ? 1 : 0)) / known.length) * 100) : null
   return { label: 'App compatibility score', score, coverage: known.length, features }
+}
+
+export function conversationFeatures(a: ScoredVerdict, b: ScoredVerdict): CompatibilityResult['features'] {
+  const dimensions = ['compatibility', 'friction', 'reciprocity', 'pacing', 'connection'] as const
+  return dimensions.map(key => ({
+    key,
+    outcome: a.analysis[key] === b.analysis[key] ? 'aligned' : 'different',
+    detail: `A marked ${key} ${a.analysis[key]}; B marked ${key} ${b.analysis[key]}.`,
+  }))
+}
+
+export function calculateConversationCompatibility(a: CompatibilityVerdict, b: CompatibilityVerdict): CompatibilityResult {
+  const result = finalizeVerdictScores(a, b)
+  return {
+    label: 'Conversation analysis score',
+    score: result.compatibilityScore,
+    coverage: 5,
+    features: conversationFeatures(result.verdicts.a, result.verdicts.b),
+    meetingIntent: result.meetingIntent,
+    verdicts: result.verdicts,
+  }
 }

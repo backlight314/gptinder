@@ -1,10 +1,10 @@
 import 'server-only'
 
 import { agentModel } from '@/lib/agents/models'
-import { calculateCompatibility } from '@/lib/psychology/compatibility'
+import { calculateCompatibility, calculateConversationCompatibility } from '@/lib/psychology/compatibility'
 import { validateProfileEvidence } from '@/lib/psychology/profile'
 import type { PersonKey, SocialInterpretation } from '@/lib/psychology/schemas'
-import { interpretMessage, speakAsPersona } from '@/lib/agents/openai'
+import { assessConversation, interpretMessage, speakAsPersona } from '@/lib/agents/openai'
 import { interpreterGuidanceText } from '@/lib/learning/adaptation'
 import { claimEncounter, loadEncounter, saveMessage, saveReaction } from './store'
 
@@ -106,10 +106,31 @@ export async function runConversationTurn(encounterId: string, sequence: number)
 }
 
 export async function completeEncounter(encounterId: string) {
-  const { database, encounter, profiles } = await loadEncounter(encounterId)
+  const { database, encounter, profiles, accountContexts } = await loadEncounter(encounterId)
   const messageCount = await database.collection<StringIdDocument>('agent_messages').countDocuments({ encounterId })
   if (messageCount !== encounter.turns) throw new Error('Conversation is incomplete')
-  const compatibility = calculateCompatibility(profiles.a, profiles.b)
+  const messageDocuments = await database.collection<StringIdDocument>('agent_messages').find({ encounterId }).sort({ sequence: 1 }).toArray()
+  const history = messageDocuments.map(item => ({ id: String(item._id), from: String(item.speakerKey), text: String(item.text) }))
+  let conversationAnalysis: ReturnType<typeof calculateConversationCompatibility> | null = null
+  try {
+    const [aVerdict, bVerdict] = await Promise.all((['a', 'b'] as const).map(key => assessConversation({
+      profile: profiles[key], accountContext: accountContexts[key], model: agentModel(key, 'compatibility'), history, scenario: encounter.scenario,
+    })))
+    conversationAnalysis = calculateConversationCompatibility(aVerdict, bVerdict)
+  } catch (error) {
+    console.error('Compatibility analysis failed', error)
+  }
+  const profileCompatibility = calculateCompatibility(profiles.a, profiles.b)
+  const compatibility = {
+    ...profileCompatibility,
+    label: conversationAnalysis?.label ?? 'Conversation analysis score' as const,
+    score: conversationAnalysis?.score ?? null,
+    coverage: conversationAnalysis ? 5 : 0,
+    features: conversationAnalysis?.features ?? [],
+    scenario: encounter.scenario,
+    meetingIntent: conversationAnalysis?.meetingIntent ?? null,
+    verdicts: conversationAnalysis?.verdicts ?? null,
+  }
   await database.collection<StringIdDocument>('conversation_encounters').updateOne(
     { _id: encounterId, status: 'running' },
     { $set: { status: 'complete', compatibility, completedAt: new Date(), updatedAt: new Date() } },

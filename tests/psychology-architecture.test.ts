@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calculateCompatibility } from '../lib/psychology/compatibility'
+import { calculateCompatibility, calculateConversationCompatibility } from '../lib/psychology/compatibility'
 import { buildFrozenProfile, validateProfileEvidence } from '../lib/psychology/profile'
 import type { ManualPersona } from '../lib/psychology/schemas'
 import { buildVoiceProfile, validateVoiceEvidence } from '../lib/voice/profile'
@@ -52,6 +52,21 @@ describe('deterministic compatibility', () => {
     expect(result.coverage).toBe(4)
     expect(result.features.find(item => item.key === 'communication')?.outcome).toBe('unknown')
     expect(result.features.find(item => item.key === 'planning')?.outcome).toBe('different')
+  })
+
+  it('derives the displayed score from conversation analysis and floors mutual agreement at one', () => {
+    const assessment = {
+      summary: 'The exchange was tense but ended with a plan.',
+      strengths: ['Both participants made a concrete plan.'],
+      considerations: ['The exchange still contained friction.'],
+      analysis: { compatibility: 'weak' as const, friction: 'high' as const, reciprocity: 'weak' as const, pacing: 'mismatched' as const, connection: 'absent' as const, rationale: 'The qualitative evidence is poor.' },
+      meetingIntent: 'agreed' as const,
+    }
+    const result = calculateConversationCompatibility(assessment, assessment)
+    expect(result.label).toBe('Conversation analysis score')
+    expect(result.score).toBe(1)
+    expect(result.meetingIntent).toBe('agreed')
+    expect(result.features).toHaveLength(5)
   })
 })
 
