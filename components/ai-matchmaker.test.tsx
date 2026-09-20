@@ -83,14 +83,30 @@ it('allows Person One to author a blank stored profile', async () => {
   expect(screen.getByLabelText('Name')).not.toBeDisabled()
   fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'My authored profile' } })
   fireEvent.change(screen.getByLabelText(/Bio/), { target: { value: 'A factual bio.' } })
-  fireEvent.change(screen.getByLabelText(/Traits/), { target: { value: 'curious' } })
-  fireEvent.change(screen.getByLabelText(/Interests/), { target: { value: 'design' } })
+  const traits = screen.getByLabelText(/Traits/)
+  const interests = screen.getByLabelText(/Interests/)
+  const values = screen.getByLabelText(/Personal values/)
+  fireEvent.change(traits, { target: { value: 'deep' } })
+  fireEvent.change(traits, { target: { value: 'deep ' } })
+  expect(traits).toHaveValue('deep ')
+  fireEvent.change(traits, { target: { value: 'deep thinker' } })
+  fireEvent.change(interests, { target: { value: 'computer' } })
+  fireEvent.change(interests, { target: { value: 'computer ' } })
+  expect(interests).toHaveValue('computer ')
+  fireEvent.change(interests, { target: { value: 'computer science' } })
+  fireEvent.change(values, { target: { value: 'personal' } })
+  fireEvent.change(values, { target: { value: 'personal ' } })
+  expect(values).toHaveValue('personal ')
+  fireEvent.change(values, { target: { value: 'personal growth' } })
   fireEvent.change(screen.getByLabelText(/Conversation style/), { target: { value: 'Concise and direct.' } })
   fireEvent.click(screen.getByRole('button', { name: /save selected profile and continue/i }))
 
   const postCall = fetchMock.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === 'POST')
   expect(postCall).toBeDefined()
-  expect(JSON.parse(String((postCall?.[1] as RequestInit).body))).toMatchObject({ userId: blankProfile.userId })
+  expect(JSON.parse(String((postCall?.[1] as RequestInit).body))).toMatchObject({
+    userId: blankProfile.userId,
+    persona: { traits: ['deep thinker'], interests: ['computer science'], values: ['personal growth'] },
+  })
 })
 
 it('lets Person Two edit and save a selected stored profile', async () => {
