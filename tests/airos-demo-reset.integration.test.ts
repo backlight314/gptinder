@@ -38,6 +38,8 @@ beforeAll(async () => {
     userId,
     cachedAvatar: { contentType: 'image/png', data: png.toString('base64'), cachedAt: now },
   })
+  await database.collection('discord_messages').insertOne({ userId, text: 'badge discord sample' })
+  await database.collection('whatsapp_messages').insertOne({ userId, text: 'badge whatsapp sample' })
 })
 
 afterAll(async () => {
@@ -51,6 +53,7 @@ describe('AIROS profile photo and demo reset', () => {
   it('serves a stable cached social photo through the local profile endpoint', async () => {
     const profile = await getPublicProfile(badgeId)
     expect(profile?.avatarUrl).toBe(`/api/airos/profiles/${badgeId}/photo`)
+    expect(profile?.messagingConnections).toEqual({ discord: true, whatsapp: true })
     const directory = await listPublicProfiles('', 1)
     expect(directory.profiles[0]?.avatarUrl).toBe(`/api/airos/profiles/${badgeId}/photo`)
     const response = await getPhoto(new Request(`http://localhost/api/airos/profiles/${badgeId}/photo`), {
@@ -70,6 +73,8 @@ describe('AIROS profile photo and demo reset', () => {
     await database.collection('social_posts').insertMany([{ userId, platform: 'linkedin', externalId: 'badge-post' }, { userId: 'unrelated', platform: 'linkedin', externalId: 'other-post' }])
     await database.collection('social_comments').insertMany([{ userId, platform: 'linkedin', externalId: 'badge-comment' }, { userId: 'unrelated', platform: 'linkedin', externalId: 'other-comment' }])
     await database.collection<{ _id: string }>('users').insertMany([{ _id: userId }, { _id: 'unrelated' }])
+    await database.collection('discord_messages').insertOne({ userId: 'unrelated', text: 'keep discord sample' })
+    await database.collection('whatsapp_messages').insertOne({ userId: 'unrelated', text: 'keep whatsapp sample' })
 
     const result = await resetAirosDemoData()
     expect(result.profileUserCount).toBe(1)
@@ -80,5 +85,7 @@ describe('AIROS profile photo and demo reset', () => {
     expect(await database.collection('social_posts').countDocuments({ userId: 'unrelated' })).toBe(1)
     expect(await database.collection('social_comments').countDocuments({ userId: 'unrelated' })).toBe(1)
     expect(await database.collection<{ _id: string }>('users').countDocuments({ _id: 'unrelated' })).toBe(1)
+    expect(await database.collection('discord_messages').countDocuments({ userId: 'unrelated' })).toBe(1)
+    expect(await database.collection('whatsapp_messages').countDocuments({ userId: 'unrelated' })).toBe(1)
   })
 })

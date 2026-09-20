@@ -79,6 +79,10 @@ export type PublicProfile = {
   source: 'badge_import'
   observationCount: number
   connectionCount: number
+  messagingConnections: {
+    discord: boolean
+    whatsapp: boolean
+  }
   firstImportedAt: string
   lastImportedAt: string
   analysis: null | {
@@ -359,15 +363,23 @@ export const getPublicProfile = cache(async (badgeIdValue: string): Promise<Publ
     database.collection<AirosAnalysisDocument>(ANALYSES).findOne({ badgeId, status: 'ready' }),
   ])
   if (!profile) return null
-  const socialProfiles = await Promise.all([
-    ['linkedin_profiles', profile.linkedin], ['x_profiles', profile.x], ['instagram_profiles', profile.instagram],
-  ].map(([name, link]) => {
-    const urls = link ? [link.replace(/\/$/, ''), `${link.replace(/\/$/, '')}/`] : []
-    return database.collection(name!).findOne({ $or: [
+  const [socialProfiles, discordRecord, whatsappRecord] = await Promise.all([
+    Promise.all([
+      ['linkedin_profiles', profile.linkedin], ['x_profiles', profile.x], ['instagram_profiles', profile.instagram],
+    ].map(([name, link]) => {
+      const urls = link ? [link.replace(/\/$/, ''), `${link.replace(/\/$/, '')}/`] : []
+      return database.collection(name!).findOne({ $or: [
+        { userId: profile.userId },
+        ...(urls.length ? [{ sourceUrl: { $in: urls } }, { url: { $in: urls } }, { linkedinUrl: { $in: urls } }] : []),
+      ] }, { projection: { avatarUrl: 1, profilePicUrlHD: 1, profilePicUrl: 1, profilePicture: 1, photo: 1, profile_image_url_https: 1, profile_image_url: 1, cachedAvatar: 1 } })
+    })),
+    database.collection('discord_messages').findOne({ $or: [
       { userId: profile.userId },
-      ...(urls.length ? [{ sourceUrl: { $in: urls } }, { url: { $in: urls } }, { linkedinUrl: { $in: urls } }] : []),
-    ] }, { projection: { avatarUrl: 1, profilePicUrlHD: 1, profilePicUrl: 1, profilePicture: 1, photo: 1, profile_image_url_https: 1, profile_image_url: 1, cachedAvatar: 1 } })
-  }))
+      { authorUserId: profile.userId },
+      { 'author.userId': profile.userId },
+    ] }, { projection: { _id: 1 } }),
+    database.collection('whatsapp_messages').findOne({ userId: profile.userId }, { projection: { _id: 1 } }),
+  ])
   const hasPhoto = socialProfiles.some((socialProfile) => Boolean(socialProfile && (socialProfile.cachedAvatar || profilePhoto(socialProfile))))
   return {
     avatarUrl: hasPhoto ? `/api/airos/profiles/${encodeURIComponent(profile.badgeId)}/photo` : null,
@@ -384,6 +396,7 @@ export const getPublicProfile = cache(async (badgeIdValue: string): Promise<Publ
     source: 'badge_import',
     observationCount: profile.observationCount || 0,
     connectionCount,
+    messagingConnections: { discord: Boolean(discordRecord), whatsapp: Boolean(whatsappRecord) },
     firstImportedAt: profile.firstImportedAt.toISOString(),
     lastImportedAt: profile.lastImportedAt.toISOString(),
     analysis: analysis?.headline && analysis.summary && analysis.interests && analysis.conversationStarters && analysis.generatedAt
