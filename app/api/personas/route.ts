@@ -7,6 +7,7 @@ export const runtime = 'nodejs'
 
 const requestSchema = z.object({
   userId: z.string().trim().regex(/^usr_[a-z0-9_]{3,64}$/).optional(),
+  badgeId: z.string().trim().min(1).max(160).optional(),
   slot: z.enum(['a', 'b']),
   persona: manualPersonaSchema,
 })
@@ -39,7 +40,10 @@ export async function POST(request: Request) {
       )
     }
     const currentUserId = await currentAgentContextUserId()
-    if (body.data.userId && body.data.userId !== currentUserId) {
+    const selectedPublicProfile = body.data.slot === 'b' && body.data.badgeId && body.data.userId
+      ? (await listLabProfiles('b')).find(profile => profile.badgeId === body.data.badgeId && profile.userId === body.data.userId)
+      : undefined
+    if (body.data.userId && body.data.userId !== currentUserId && !selectedPublicProfile) {
       return Response.json({ error: 'This account is not authorized in the current browser session.' }, { status: 403 })
     }
 

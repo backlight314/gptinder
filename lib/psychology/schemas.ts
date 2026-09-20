@@ -151,6 +151,27 @@ export const personaSpeakerSchema = z.object({
 
 export type PersonaSpeakerOutput = z.infer<typeof personaSpeakerSchema>
 
+export const compatibilityAnalysisSchema = z.object({
+  compatibility: z.enum(['strong', 'mixed', 'weak']),
+  friction: z.enum(['none', 'low', 'moderate', 'high']),
+  reciprocity: z.enum(['strong', 'mixed', 'weak']),
+  pacing: z.enum(['aligned', 'mixed', 'mismatched']),
+  connection: z.enum(['present', 'uncertain', 'absent']),
+  rationale: z.string().min(1).max(400),
+})
+
+export type CompatibilityAnalysis = z.infer<typeof compatibilityAnalysisSchema>
+
+export const compatibilityVerdictSchema = z.object({
+  summary: z.string().min(1).max(600),
+  strengths: z.array(z.string().min(1).max(220)).min(1).max(3),
+  considerations: z.array(z.string().min(1).max(220)).min(1).max(3),
+  analysis: compatibilityAnalysisSchema,
+  meetingIntent: z.enum(['agreed', 'interested', 'declined', 'unclear']),
+})
+
+export type CompatibilityVerdict = z.infer<typeof compatibilityVerdictSchema>
+
 export const manualPersonaSchema = z.object({
   name: z.string().trim().min(1).max(80),
   bio: z.string().trim().min(1).max(600),

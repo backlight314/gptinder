@@ -112,18 +112,29 @@ Each verdict uses this server-validated shape:
 
 ```ts
 type CompatibilityVerdict = {
-  score: number // integer from 0 through 100
   summary: string // at most 60 words
   strengths: string[] // 1–3 grounded observations
-  considerations: string[] // 0–2 grounded observations
+  considerations: string[] // 1–3 grounded observations
+  analysis: {
+    compatibility: 'strong' | 'mixed' | 'weak'
+    friction: 'none' | 'low' | 'moderate' | 'high'
+    reciprocity: 'strong' | 'mixed' | 'weak'
+    pacing: 'aligned' | 'mixed' | 'mismatched'
+    connection: 'present' | 'uncertain' | 'absent'
+    rationale: string
+  }
+  meetingIntent: 'agreed' | 'interested' | 'declined' | 'unclear'
 }
 ```
 
-The end-of-conversation UI will show each agent's perspective and score, plus
-a **combined compatibility score** calculated by the server as
+The model supplies qualitative analysis, not a numeric score. The server maps
+the five qualitative signals to a bounded 0–100 score using a deterministic
+rubric, then calculates the **combined compatibility score** as
 `Math.round((a.score + b.score) / 2)`. A third model must not generate that
-combined score. Label it as an AI simulation based on one short conversation,
-not an objective measure or real-world promise.
+combined score. If both agents explicitly agree to meet, the server floors
+each derived score at 1 so an agreement cannot render as zero. Label the
+result as an AI simulation based on one short conversation, not an objective
+measure or real-world promise.
 
 ### Implementation requirements
 
@@ -148,7 +159,8 @@ not an objective measure or real-world promise.
 `app/api/match/conversation/route.ts` implements this loop.
 
 1. The UI sends two persona snapshots and a turn count (six by default).
-2. The API accepts between two and ten turns.
+2. The API accepts between two and six turns; the product uses six total
+   messages, three from each agent.
 3. Before every turn, the API loads the current speaker's recent imported
    posts from MongoDB as a bounded voice-and-pacing reference. If configured,
    it also semantically searches that speaker's Vector Store.
@@ -159,10 +171,25 @@ not an objective measure or real-world promise.
 6. The transcript is returned as JSON and rendered by the date screen.
 7. After the final turn, the API returns both grounded assessments and a
    server-calculated combined compatibility score as described above. The
-   verdict rubric scores reciprocal substance and conversational fit, not
-   generic politeness or agreement, and requires at least one concrete
-   consideration. If a verdict cannot be produced, it still returns the
-   transcript and marks the verdict unavailable.
+   verdict first analyzes compatibility, friction, reciprocity, pacing, and
+   connection, then derives `meetingIntent` as `agreed`, `interested`,
+   `declined`, or `unclear`. The server derives the numeric score from those
+   qualitative signals, so the model cannot return an arbitrary number. The
+   rubric scores reciprocal substance and conversational fit, not generic
+   politeness or agreement. If both agents explicitly agree to meet, the
+   server prevents a zero score. If a verdict cannot be produced, it still
+   returns the transcript and marks the verdict unavailable.
+
+## Scenario modes
+
+The simulator accepts `scenario: "natural" | "friction"`. The natural mode
+lets chemistry emerge from the profiles. The friction mode deliberately creates
+a poor match through mismatched pacing, weak reciprocity, impatience, civil
+dismissiveness, and unresolved disagreement. It must not generate threats,
+slurs, harassment, or dehumanizing language. This design is informed by
+Takayama, Groom, and Nass, “I’m Sorry, Dave: I’m Afraid I Won’t Do That:
+Social Aspects of Human-Agent Conflict,” CHI 2009, DOI
+10.1145/1518701.1519021.
 
 ## Retrieval setup
 
