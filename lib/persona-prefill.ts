@@ -180,9 +180,10 @@ export async function persistPersonaPrefill(seed: PersonaPrefillSeed) {
     createdAt: now,
     updatedAt: now,
   }
+  const { createdAt, ...updates } = document
   await database.collection<PersonaPrefillDocument>('persona_prefills').updateOne(
     { userId: seed.userId },
-    { $set: document, $setOnInsert: { createdAt: document.createdAt } },
+    { $set: updates, $setOnInsert: { createdAt } },
     { upsert: true },
   )
   return persona

@@ -26,13 +26,23 @@ type ImportResponse = {
   storedProfileCount?: number
   storedPostCount?: number
   storedCommentCount?: number
+  agentContext?: AgentContextView
   error?: string
 }
 type PersonaSaveResponse = {
   userId?: string
   personaId?: string
   revision?: number
+  agentContext?: AgentContextView
   error?: string
+}
+type AgentContextView = {
+  revision: number
+  compiledPrompt: string
+  sourceEvidenceIds: string[]
+  sourceStats: Array<{ source: string; documentsRead: number; documentsIncluded: number; charactersIncluded: number; truncated: boolean }>
+  builtAt: string
+  updatedAt: string
 }
 type StoredProfile = Persona & {
   userId: string
@@ -83,6 +93,10 @@ function ProfilePreview({ persona, user }: { persona: Persona; user: PersonKey }
   return <aside className="rounded-3xl border border-primary/20 bg-primary/5 p-5 sm:p-6"><p className="text-xs font-semibold uppercase tracking-[.18em] text-primary">Stored agent snapshot</p><div className="mt-4 flex items-center gap-3"><Avatar person={persona} size="md" /><div><p className="font-semibold">{persona.name || `Person ${user === 'a' ? 'one' : 'two'}`}</p><p className="text-xs text-muted-foreground">Saved to MongoDB when you confirm this form.</p></div></div><dl className="mt-5 space-y-4 text-sm"><div><dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Bio</dt><dd className="mt-1 leading-relaxed">{persona.bio || 'Add a concise description.'}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Traits</dt><dd className="mt-2 flex flex-wrap gap-2">{persona.traits.length ? persona.traits.map(item => <span key={item} className="rounded-full bg-card px-2.5 py-1 text-xs font-medium">{item}</span>) : 'Add traits.'}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Interests</dt><dd className="mt-2 flex flex-wrap gap-2">{persona.interests.length ? persona.interests.map(item => <span key={item} className="rounded-full bg-card px-2.5 py-1 text-xs font-medium">{item}</span>) : 'Add interests.'}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Conversation style</dt><dd className="mt-1 leading-relaxed">{persona.style || 'Describe their voice and pacing.'}</dd></div></dl></aside>
 }
 
+function AgentContextPanel({ context, rebuilding, error, onRebuild }: { context: AgentContextView; rebuilding: boolean; error: string; onRebuild: () => void }) {
+  return <section className="mt-7 rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">Agent prompt</p><h2 className="mt-1 font-semibold">Context revision {context.revision}</h2><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Built {new Date(context.builtAt).toLocaleString()}. Profile and import edits are included only when you rebuild.</p></div><Button variant="secondary" onClick={onRebuild} disabled={rebuilding}>{rebuilding ? 'Rebuilding…' : 'Rebuild my agent prompt'} <RefreshCw size={15} /></Button></div><div className="mt-4 grid gap-2 sm:grid-cols-2">{context.sourceStats.map(stat => <div className="rounded-xl border border-border bg-card/80 p-3 text-xs" key={stat.source}><div className="flex items-center justify-between gap-2"><span className="font-semibold">{stat.source.replace(/([A-Z])/g, ' $1')}</span>{stat.truncated && <span className="text-muted-foreground">shortened</span>}</div><p className="mt-1 text-muted-foreground">{stat.documentsIncluded} included of {stat.documentsRead} read · {stat.charactersIncluded} characters</p></div>)}</div><details className="mt-4"><summary className="cursor-pointer text-xs font-semibold">Preview compiled prompt</summary><pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-xl border border-border bg-background p-3 text-xs leading-relaxed text-muted-foreground">{context.compiledPrompt}</pre></details>{error && <p role="alert" className="mt-3 rounded-xl bg-destructive/10 p-3 text-xs text-destructive">{error}</p>}</section>
+}
+
 function StoredProfileCard({ profile, selected, onSelect }: { profile: StoredProfile; selected: boolean; onSelect: () => void }) {
   const role = profile.role || 'Hack the North participant'
   return <button type="button" aria-pressed={selected} onClick={onSelect} className={`rounded-2xl border p-3 text-left transition-all hover:-translate-y-0.5 hover:border-primary/40 ${selected ? 'border-primary bg-primary/8 shadow-sm' : 'border-border bg-card'}`}>
@@ -106,6 +120,9 @@ function Profile({ user, initial, initialUserId, next, onUserId, back }: { user:
   const [importStatus, setImportStatus] = useState('')
   const [saveError, setSaveError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [agentContext, setAgentContext] = useState<AgentContextView | null>(null)
+  const [rebuildingContext, setRebuildingContext] = useState(false)
+  const [contextError, setContextError] = useState('')
   const [userId, setUserId] = useState<string | undefined>(initialUserId)
   const canEdit = user === 'a'
   const isValid = Boolean(persona.name.trim() && persona.bio.trim() && persona.style.trim() && persona.traits.length && persona.interests.length)
@@ -183,6 +200,7 @@ function Profile({ user, initial, initialUserId, next, onUserId, back }: { user:
       }
       setUserId(data.userId)
       onUserId(data.userId)
+      if (data.agentContext) setAgentContext(data.agentContext)
       setImportStatus(`Stored ${data.storedProfileCount ?? urls.length} profiles, ${data.storedPostCount ?? 0} posts, and ${data.storedCommentCount ?? 0} comments under ${data.userId}. Re-importing updates these records without duplicates.`)
     } catch (reason) {
       setImportError(reason instanceof Error ? reason.message : 'Unable to import these social profiles.')
@@ -204,11 +222,27 @@ function Profile({ user, initial, initialUserId, next, onUserId, back }: { user:
       if (!response.ok || !data.userId) throw new Error(data.error ?? 'Unable to save this persona.')
       setUserId(data.userId)
       onUserId(data.userId)
+      if (data.agentContext) setAgentContext(data.agentContext)
       next(persona, data.userId)
     } catch (reason) {
       setSaveError(reason instanceof Error ? reason.message : 'Unable to save this persona.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const rebuildAgentContext = async () => {
+    setRebuildingContext(true)
+    setContextError('')
+    try {
+      const response = await fetch('/api/agent-contexts/rebuild', { method: 'POST' })
+      const data = await response.json().catch(() => ({})) as { agentContext?: AgentContextView; error?: string }
+      if (!response.ok || !data.agentContext) throw new Error(data.error ?? 'Unable to rebuild the agent prompt.')
+      setAgentContext(data.agentContext)
+    } catch (reason) {
+      setContextError(reason instanceof Error ? reason.message : 'Unable to rebuild the agent prompt.')
+    } finally {
+      setRebuildingContext(false)
     }
   }
 
@@ -266,6 +300,7 @@ function Profile({ user, initial, initialUserId, next, onUserId, back }: { user:
               {importStatus && <p role="status" className="mt-4 rounded-xl bg-emerald-500/10 p-3 text-xs leading-relaxed text-emerald-700 dark:text-emerald-300">{importStatus}</p>}
               {importError && <p role="alert" className="mt-4 rounded-xl bg-destructive/10 p-3 text-xs leading-relaxed text-destructive">{importError}</p>}
             </section> : <section className="rounded-3xl border border-primary/20 bg-primary/5 p-5 shadow-sm sm:p-7"><div className="flex items-start gap-3"><span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground"><Check size={17} /></span><div><h2 className="font-semibold">Stored profile selected</h2><p className="mt-1 text-xs leading-relaxed text-muted-foreground">{selectedPrefilled ? 'Prefilled from stored public profile data and social activity.' : 'Review the stored personality snapshot below.'} {canEdit ? 'You can edit it before saving.' : 'Person Two can review it but cannot edit it here.'}</p></div></div><dl className="mt-5 space-y-3 text-sm"><div><dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Name</dt><dd className="mt-1 font-semibold">{persona.name || 'No name available.'}</dd></div><div><dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Bio</dt><dd className="mt-1 leading-relaxed">{persona.bio || 'No public bio available.'}</dd></div><div><dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Traits and interests</dt><dd className="mt-1 leading-relaxed">{[...persona.traits, ...persona.interests].length ? [...persona.traits, ...persona.interests].join(' · ') : 'Not disclosed.'}</dd></div><div><dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Values and conversation style</dt><dd className="mt-1 leading-relaxed">{[...persona.values, persona.style].filter(Boolean).join(' · ') || 'Values not disclosed.'}</dd></div></dl>{canEdit && <div className="mt-5 border-t border-primary/15 pt-4"><Button variant="secondary" onClick={startNewProfile}><Link2 size={16} /> Import a different profile from URLs</Button></div>}</section>}
+            {agentContext && <AgentContextPanel context={agentContext} rebuilding={rebuildingContext} error={contextError} onRebuild={() => { void rebuildAgentContext() }} />}
             <div className="mt-7 border-t border-border pt-7">
             <div className="grid gap-5">
               <label htmlFor={`name-${user}`}><span className="text-sm font-semibold">Name</span><input id={`name-${user}`} required disabled={!canEdit} maxLength={80} value={persona.name} onChange={event => change('name', event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none ring-primary focus:ring-2 disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-70" /></label>
@@ -298,7 +333,7 @@ function Profile({ user, initial, initialUserId, next, onUserId, back }: { user:
   )
 }
 
-type AgentMessage = { _id: string; sequence: number; speakerKey: PersonKey; action: string; text: string; voicePromptId?: string }
+type AgentMessage = { _id: string; sequence: number; speakerKey: PersonKey; action: string; text: string; agentContextRevision?: number; voicePromptId?: string }
 type Interpretation = {
   literalMeaning: string
   possibleIntent: string
