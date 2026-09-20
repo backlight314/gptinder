@@ -1,5 +1,7 @@
+import asyncio
 import logging
 import os
+import time
 from typing import TypeVar
 
 import anthropic
@@ -17,18 +19,69 @@ SCORE_MODEL = os.environ.get("SCORE_MODEL", "claude-sonnet-5")
 T = TypeVar("T", bound=BaseModel)
 
 
+class ExtractionFailed(RuntimeError):
+    """A structured extraction call produced no usable output on every attempt."""
+
+
+class _EmptyStructuredOutput(Exception):
+    pass
+
+
+EXTRACT_TIMEOUT_S = 120
+MAX_EXTRACT_RETRIES = 2
+# Timeouts (an APIConnectionError subclass), empty output and parse failures (ValueError covers pydantic's
+# ValidationError and JSON errors) are retried, as are rate limits and 5xx now that the SDK's own retries are off.
+_RETRYABLE = (
+    anthropic.APIConnectionError,
+    anthropic.RateLimitError,
+    anthropic.InternalServerError,
+    _EmptyStructuredOutput,
+    ValueError,
+)
+
+
 async def extract_structured(
     system: str, raw_text: str, output_model: type[T], model: str = EXTRACTION_MODEL
 ) -> T:
-    """One narrow extraction call, constrained to output_model's JSON schema."""
-    response = await client.messages.parse(
-        model=model,
-        max_tokens=2048,
-        system=system,
-        messages=[{"role": "user", "content": raw_text}],
-        output_format=output_model,
+    """One narrow extraction call, constrained to output_model's JSON schema.
+
+    Each attempt has a 120s timeout; up to 2 more attempts follow a timeout, an empty response or an
+    unparseable one. Logs carry timings, sizes and error type names only - never message text or model output.
+    """
+    attempts = 1 + MAX_EXTRACT_RETRIES
+    last_error = "unknown"
+    input_chars = len(system) + len(raw_text)
+    for attempt in range(1, attempts + 1):
+        started = time.perf_counter()
+        try:
+            # max_retries=0: this loop owns retrying, so the timeout budget isn't multiplied by the SDK's.
+            response = await client.with_options(timeout=EXTRACT_TIMEOUT_S, max_retries=0).messages.parse(
+                model=model,
+                max_tokens=2048,
+                system=system,
+                messages=[{"role": "user", "content": raw_text}],
+                output_format=output_model,
+            )
+            parsed = response.parsed_output
+            if parsed is None:
+                raise _EmptyStructuredOutput()
+        except _RETRYABLE as e:
+            last_error = type(e).__name__
+            logger.warning(
+                "extract_structured %s failed (%s) on attempt %d/%d after %.1fs; input_chars=%d",
+                output_model.__name__, last_error, attempt, attempts, time.perf_counter() - started, input_chars,
+            )
+            if attempt < attempts and isinstance(e, (anthropic.RateLimitError, anthropic.InternalServerError)):
+                await asyncio.sleep(attempt)
+            continue
+        logger.info(
+            "extract_structured %s ok on attempt %d/%d in %.1fs; input_chars=%d",
+            output_model.__name__, attempt, attempts, time.perf_counter() - started, input_chars,
+        )
+        return parsed
+    raise ExtractionFailed(
+        f"{output_model.__name__} extraction failed after {attempts} attempts (last error: {last_error})"
     )
-    return response.parsed_output
 
 
 class EmptyModelReply(RuntimeError):

@@ -6,9 +6,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .extraction import build_persona
 from .date_agent import run_date
+from . import whatsapp_store
 from .discord_store import load_discord_messages, save_discord_messages
 from .ingestion import normalize_raw_text
-from .llm import EmptyModelReply
+from .llm import EmptyModelReply, ExtractionFailed
 from .schemas import (
     DateRequest,
     DateResponse,
@@ -18,8 +19,11 @@ from .schemas import (
     PersonalityRequest,
     ScoreRequest,
     ScoreResponse,
+    WhatsAppIngestRequest,
+    WhatsAppIngestResponse,
 )
 from .scoring import score_match
+from .whatsapp_parser import WhatsAppParseError, parse_whatsapp_export
 
 app = FastAPI(title="gptinder backend")
 
@@ -31,15 +35,45 @@ app.add_middleware(
 )
 
 
+def _check_ingest_token(x_ingest_token: str | None) -> None:
+    expected = os.environ.get("INGEST_TOKEN")
+    if expected and not hmac.compare_digest(x_ingest_token or "", expected):
+        raise HTTPException(status_code=401, detail="Invalid ingest token")
+
+
 @app.post("/ingest/discord", response_model=DiscordIngestResponse)
 def ingest_discord(
     req: DiscordIngestRequest, x_ingest_token: str | None = Header(default=None)
 ) -> DiscordIngestResponse:
-    expected = os.environ.get("INGEST_TOKEN")
-    if expected and not hmac.compare_digest(x_ingest_token or "", expected):
-        raise HTTPException(status_code=401, detail="Invalid ingest token")
+    _check_ingest_token(x_ingest_token)
     added, total = save_discord_messages(req.user_id, req.messages)
     return DiscordIngestResponse(user_id=req.user_id, added=added, total=total)
+
+
+@app.post("/ingest/whatsapp", response_model=WhatsAppIngestResponse)
+def ingest_whatsapp(
+    req: WhatsAppIngestRequest, x_ingest_token: str | None = Header(default=None)
+) -> WhatsAppIngestResponse:
+    """Parse a WhatsApp "Export chat" text, keep only `display_name`'s own messages, and store them."""
+    _check_ingest_token(x_ingest_token)
+    if len(req.export_text) > whatsapp_store.MAX_EXPORT_CHARS:
+        raise HTTPException(status_code=413, detail="The export is too large to import in one request.")
+    try:
+        parsed = parse_whatsapp_export(req.export_text, req.display_name, req.date_order)
+    except WhatsAppParseError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    messages, truncated, dropped = whatsapp_store.apply_size_caps(parsed.messages)
+    added, total = whatsapp_store.save_whatsapp_messages(req.user_id, messages)
+    return WhatsAppIngestResponse(
+        user_id=req.user_id,
+        added=added,
+        total=total,
+        parsed=len(parsed.messages),
+        date_order=parsed.date_order,
+        date_order_guessed=parsed.date_order_guessed,
+        truncated_messages=truncated,
+        dropped_oldest=dropped,
+    )
 
 
 @app.post("/personality", response_model=Persona)
@@ -57,7 +91,10 @@ async def personality(req: PersonalityRequest) -> Persona:
         raw_text = normalize_raw_text(req.raw_profile_text, req.raw_whatsapp_text, discord_text)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    return await build_persona(raw_text, req.name)
+    try:
+        return await build_persona(raw_text, req.name)
+    except ExtractionFailed as e:
+        raise HTTPException(status_code=502, detail=str(e))
 
 
 @app.post("/date", response_model=DateResponse)
