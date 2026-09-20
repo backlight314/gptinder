@@ -10,12 +10,13 @@ import { adaptationForEncounter, latestAdaptation, listEncounters, recordEncount
 import { buildStoredAdaptation } from '@/lib/learning/adaptation'
 import { feedbackAdaptationWorkflow } from '@/workflows/feedback-adaptation'
 import * as agents from '@/lib/agents/openai'
+import { rebuildAgentContext } from '@/lib/agent-contexts/store'
 
 vi.mock('workflow', () => ({ getWorkflowMetadata: () => ({ workflowRunId: 'test-feedback-run' }) }))
 vi.mock('@/lib/agents/openai', () => ({
-  buildVoicePrompt: vi.fn(async ({ voiceProfile }) => ({
-    systemInstructions: 'Use lowercase, short sentences, and casual punctuation matching the supplied samples.',
-    evidenceIds: [voiceProfile.samples[0].evidenceId],
+  buildAccountContext: vi.fn(async () => ({
+    compiledPrompt: '## Texting style\nUse lowercase, short sentences, and casual punctuation matching the supplied samples.',
+    sourceEvidenceIds: [],
   })),
   interpretMessage: vi.fn(async ({ profile, incomingMessage }) => ({
     literalMeaning: incomingMessage.text, possibleIntent: 'Possibly proposing a quiet meeting.',
@@ -81,19 +82,30 @@ async function conversation() {
 }
 
 describe('MongoDB agent lifecycle', () => {
-  it('freezes owner-only voice evidence, builds separate prompts, and persists idempotent turns', async () => {
+  it('freezes account-context snapshots, makes no runtime builder calls, and persists idempotent turns', async () => {
     const id = await conversation()
     const loaded = await loadEncounter(id)
     expect(loaded.encounter.status).toBe('complete')
-    expect(loaded.voiceProfiles.a.samples.map(sample => sample.text)).toContain('yeah coffee works lol')
-    expect(loaded.voiceProfiles.a.samples.map(sample => sample.text)).toContain('sounds good :)')
-    expect(JSON.stringify(loaded.voiceProfiles.a)).not.toContain('DO NOT USE')
+    expect(loaded.accountContexts.a.compiledPrompt).toContain('lowercase')
+    expect(loaded.accountContexts.a.revision).toBe(1)
     const before = vi.mocked(agents.speakAsPersona).mock.calls.length
     await runConversationTurn(id, 1)
     expect(vi.mocked(agents.speakAsPersona).mock.calls.length).toBe(before)
     expect(await database.collection('agent_messages').countDocuments({ encounterId: id })).toBe(2)
-    expect(await database.collection('agent_voice_prompts').countDocuments({ encounterId: id })).toBe(2)
-    expect(vi.mocked(agents.speakAsPersona).mock.calls.at(-1)?.[0].voicePrompt.systemInstructions).toContain('lowercase')
+    expect(await database.collection('agent_voice_prompts').countDocuments({ encounterId: id })).toBe(0)
+    expect(vi.mocked(agents.speakAsPersona).mock.calls.at(-1)?.[0].accountContext.compiledPrompt).toContain('lowercase')
+
+    // One initial builder run per newly created account; ordinary persona edits do not rebuild.
+    expect(vi.mocked(agents.buildAccountContext).mock.calls).toHaveLength(2)
+    await storePersona(manualPersonaSchema.parse({ name: 'Alex', bio: 'Enjoys quiet weekends.', traits: ['curious'], interests: ['coffee'], style: 'more direct lowercase' }), 'a', participants.a.userId)
+    expect(vi.mocked(agents.buildAccountContext).mock.calls).toHaveLength(2)
+
+    const priorSnapshot = loaded.accountContexts.a
+    const rebuilt = await rebuildAgentContext(participants.a.userId, database)
+    expect(rebuilt.revision).toBe(priorSnapshot.revision + 1)
+    expect(vi.mocked(agents.buildAccountContext).mock.calls).toHaveLength(3)
+    // The running encounter keeps the version and text it captured at creation.
+    expect((await loadEncounter(id)).accountContexts.a).toEqual(priorSnapshot)
   })
 
   it('learns positive and negative cues once, exposes shared logs, and freezes adaptation versions per conversation', async () => {

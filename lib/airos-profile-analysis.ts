@@ -113,7 +113,8 @@ export async function analyzeAirosProfile(badgeId: string) {
   const database = await getMongoDatabase()
   const analyses = database.collection<AirosAnalysisDocument>(COLLECTION)
   const current = await analyses.findOne({ badgeId: profile.badgeId })
-  if (current?.status === 'ready' && current.sourceHash === hash) return { cached: true, analysis: current }
+  // An explicit Analyze request is a refresh request. Never return a prior
+  // completed analysis in place of fetching the social sources again.
   if (current?.status === 'processing' && current.lockExpiresAt && current.lockExpiresAt > new Date()) {
     throw new AirosHttpError('This profile is already being analyzed.', 409)
   }

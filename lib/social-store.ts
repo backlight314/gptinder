@@ -3,6 +3,7 @@ import 'server-only'
 import { createHash } from 'node:crypto'
 import { ObjectId } from 'mongodb'
 import { getMongoDatabase } from '@/lib/mongodb'
+import { agentContextView, ensureMinimalAgentContext, initializeNewAgentContext } from '@/lib/agent-contexts/store'
 import type { SocialImportPayload, SocialPlatform } from '@/lib/social-types'
 
 const PROFILE_COLLECTIONS: Record<SocialPlatform, string> = {
@@ -42,6 +43,11 @@ function uniqueByExternalId<T extends { externalId: string }>(items: T[]) {
   return Array.from(unique.values())
 }
 
+function sameHandle(first: string | null, second: string | null) {
+  if (!first || !second) return false
+  return first.replace(/^@/, '').trim().toLowerCase() === second.replace(/^@/, '').trim().toLowerCase()
+}
+
 export async function storeSocialImport(payload: SocialImportPayload, requestedUserId?: string) {
   const database = await getMongoDatabase()
   const now = new Date()
@@ -68,7 +74,7 @@ export async function storeSocialImport(payload: SocialImportPayload, requestedU
     || requestedUserId
     || personalizedUserId(payload.profile.name, `${payload.profile.platform}:${platformIdentity}`)
 
-  await database.collection<{ _id: string; displayName: string; createdAt: Date; updatedAt: Date }>('users').updateOne(
+  const userWrite = await database.collection<{ _id: string; displayName: string; createdAt: Date; updatedAt: Date }>('users').updateOne(
     { _id: userId },
     {
       $set: { displayName: payload.profile.name, updatedAt: now },
@@ -76,15 +82,21 @@ export async function storeSocialImport(payload: SocialImportPayload, requestedU
     },
     { upsert: true },
   )
+  let agentContext = await ensureMinimalAgentContext(userId, database)
 
-  const profileFilter = rawProfile.id
-    ? { id: rawProfile.id }
-    : existingProfile?._id
-      ? { _id: existingProfile._id }
+  // The lookup above may have resolved a previous import by its stable URL or
+  // account. Keep updating that record even when a later scrape starts
+  // returning an external id that the original scrape did not provide.
+  // Otherwise the id filter would miss the existing record and an upsert would
+  // violate the one-profile-per-user constraint.
+  const profileFilter = existingProfile?._id
+    ? { _id: existingProfile._id }
+    : rawProfile.id
+      ? { id: rawProfile.id }
       : { userId }
   const profileResult = await profileCollection.findOneAndUpdate(
     profileFilter,
-    { $set: { ...rawProfile, avatarUrl: payload.profile.avatarUrl, userId, syncedAt: now } },
+    { $set: { ...rawProfile, platform: payload.profile.platform, avatarUrl: payload.profile.avatarUrl, userId, syncedAt: now } },
     { upsert: true, returnDocument: 'after' },
   )
   if (!profileResult) throw new Error('MongoDB did not return the stored platform profile')
@@ -97,20 +109,23 @@ export async function storeSocialImport(payload: SocialImportPayload, requestedU
   if (importedPosts.length) {
     await posts.bulkWrite(
       importedPosts.map(({ sourceData, ...post }) => ({
-        updateOne: {
+        replaceOne: {
           filter: { platform: payload.profile.platform, externalId: post.externalId },
-          update: {
-            $set: {
-              userId,
-              profileId,
-              platform: payload.profile.platform,
-              externalId: post.externalId,
-              url: post.url,
-              text: post.text,
-              publishedAt: post.publishedAt ? new Date(post.publishedAt) : null,
-              raw: sourceData,
-              syncedAt: now,
-            },
+          replacement: {
+            userId,
+            profileId,
+            platform: payload.profile.platform,
+            externalId: post.externalId,
+            url: post.url,
+            text: post.text,
+            kind: post.kind,
+            imageUrl: post.imageUrl,
+            publishedAt: post.publishedAt ? new Date(post.publishedAt) : null,
+            likeCount: post.likeCount,
+            commentCount: post.commentCount,
+            viewCount: post.viewCount,
+            raw: sourceData,
+            syncedAt: now,
           },
           upsert: true,
         },
@@ -141,6 +156,7 @@ export async function storeSocialImport(payload: SocialImportPayload, requestedU
               postId: postIds.get(comment.postExternalId) || null,
               platform: payload.profile.platform,
               externalId: comment.externalId,
+              authorUserId: sameHandle(comment.authorHandle, payload.profile.handle) ? userId : null,
               parentCommentId: null,
               text: comment.text,
               publishedAt: comment.publishedAt ? new Date(comment.publishedAt) : null,
@@ -163,6 +179,40 @@ export async function storeSocialImport(payload: SocialImportPayload, requestedU
     externalId: { $nin: importedComments.map((comment) => comment.externalId) },
   })
 
+  const sections = database.collection('social_profile_sections')
+  const importedSections = uniqueByExternalId(payload.sections)
+  if (importedSections.length) {
+    await sections.bulkWrite(
+      importedSections.map(({ sourceData, ...section }) => ({
+        updateOne: {
+          filter: { userId, platform: payload.profile.platform, externalId: section.externalId },
+          update: {
+            $set: {
+              userId,
+              profileId,
+              platform: payload.profile.platform,
+              externalId: section.externalId,
+              kind: section.kind,
+              heading: section.heading,
+              text: section.text,
+              position: section.position,
+              raw: sourceData,
+              syncedAt: now,
+            },
+          },
+          upsert: true,
+        },
+      })),
+      { ordered: false },
+    )
+  }
+  await sections.deleteMany({
+    profileId,
+    externalId: { $nin: importedSections.map((section) => section.externalId) },
+  })
+
+  if (userWrite.upsertedCount === 1) agentContext = await initializeNewAgentContext(userId, database)
+
   return {
     userId,
     profileId: profileId.toHexString(),
@@ -171,5 +221,7 @@ export async function storeSocialImport(payload: SocialImportPayload, requestedU
     storedSectionCount: payload.sections.length,
     storedProfileImage: Boolean(payload.profile.avatarUrl),
     storedCoverImage: Boolean(payload.profile.coverImageUrl),
+    agentContext: agentContextView(agentContext),
+    userCreated: userWrite.upsertedCount === 1,
   }
 }

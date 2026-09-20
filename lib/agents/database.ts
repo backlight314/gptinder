@@ -7,10 +7,8 @@ export async function getMongoDatabase() {
   const database = await connectedDatabase()
   indexes ??= Promise.all([
     database.collection('user_profiles').createIndex({ profileVersionId: 1 }, { unique: true }),
-    database.collection('voice_profiles').createIndex({ voiceProfileVersionId: 1 }, { unique: true }),
     database.collection('agent_messages').createIndex({ encounterId: 1, sequence: 1 }, { unique: true }),
     database.collection('agent_reactions').createIndex({ encounterId: 1, inputMessageId: 1, ownerUserId: 1 }, { unique: true }),
-    database.collection('agent_voice_prompts').createIndex({ encounterId: 1, ownerUserId: 1 }, { unique: true }),
     database.collection('interpreter_adaptations').createIndex({ userId: 1, version: -1 }, { unique: true }),
     database.collection('interpreter_adaptations').createIndex({ userId: 1, sourceEncounterId: 1 }, { unique: true }),
     database.collection('conversation_encounters').createIndex({ createdAt: -1, _id: -1 }),

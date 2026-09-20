@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { storePersona } from '@/lib/persona-store'
 import { manualPersonaSchema } from '@/lib/psychology/schemas'
+import { agentContextAccessCookie, currentAgentContextUserId } from '@/lib/agent-contexts/access'
 
 export const runtime = 'nodejs'
 
@@ -19,9 +20,17 @@ export async function POST(request: Request) {
         { status: 400 },
       )
     }
+    const currentUserId = await currentAgentContextUserId()
+    if (body.data.userId && body.data.userId !== currentUserId) {
+      return Response.json({ error: 'This account is not authorized in the current browser session.' }, { status: 403 })
+    }
 
     const stored = await storePersona(body.data.persona, body.data.slot, body.data.userId)
-    return Response.json(stored)
+    const canAccessAccount = stored.userCreated || currentUserId === stored.userId
+    const response = Response.json(canAccessAccount ? stored : { ...stored, agentContext: undefined })
+    if (canAccessAccount)
+      response.headers.set('Set-Cookie', agentContextAccessCookie(stored.userId))
+    return response
   } catch (error) {
     console.error('Persona save failed', error)
     return Response.json(
