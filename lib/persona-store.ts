@@ -3,7 +3,7 @@ import 'server-only'
 import { createHash } from 'node:crypto'
 import { getMongoDatabase } from '@/lib/mongodb'
 import { agentContextView, ensureMinimalAgentContext, initializeNewAgentContext } from '@/lib/agent-contexts/store'
-import { buildPersonaPrefill, type PersonaPrefillDocument } from '@/lib/persona-prefill'
+import { buildPersonaPrefill } from '@/lib/persona-prefill'
 import { profilePhoto } from '@/lib/profile-photo'
 import { manualPersonaSchema, type ManualPersona as PsychologyPersona } from '@/lib/psychology/schemas'
 
@@ -114,8 +114,7 @@ export async function listLabProfiles(slot?: PersonaSlot): Promise<LabProfile[]>
       { projection: { _id: 0, userId: 1, cachedAvatar: 1, avatarUrl: 1, profilePicUrlHD: 1, profilePicUrl: 1, profilePicture: 1, photo: 1, profile_image_url_https: 1, profile_image_url: 1, bio: 1, headline: 1, about: 1, description: 1, summary: 1 } },
     ).toArray()),
   ) : []
-  const [prefillDocuments, posts, analyses] = badgeUserIds.length ? await Promise.all([
-    database.collection<PersonaPrefillDocument>('persona_prefills').find({ userId: { $in: badgeUserIds } }).toArray(),
+  const [posts, analyses] = badgeUserIds.length ? await Promise.all([
     database.collection<{ userId?: string; text?: string }>('social_posts').find(
       { userId: { $in: badgeUserIds }, text: { $type: 'string', $ne: '' } },
       { projection: { _id: 0, userId: 1, text: 1 } },
@@ -124,8 +123,7 @@ export async function listLabProfiles(slot?: PersonaSlot): Promise<LabProfile[]>
       { badgeId: { $in: badgeProfiles.map(profile => profile.badgeId).filter((value): value is string => typeof value === 'string') } },
       { projection: { _id: 0, badgeId: 1, summary: 1, interests: 1 } },
     ).toArray(),
-  ]) : [[], [], []]
-  const prefillByUserId = new Map(prefillDocuments.map(document => [document.userId, document]))
+  ]) : [[], []]
   const postsByUserId = new Map<string, string[]>()
   for (const post of posts) {
     if (typeof post.userId !== 'string' || typeof post.text !== 'string' || !post.text.trim()) continue
@@ -144,7 +142,6 @@ export async function listLabProfiles(slot?: PersonaSlot): Promise<LabProfile[]>
   for (const profile of badgeProfiles) {
     if (typeof profile.userId !== 'string' || typeof profile.name !== 'string') continue
     const manual = personaByUserId.get(profile.userId)?.persona
-    const persistedPrefill = prefillByUserId.get(profile.userId)
     const profileTexts = (socialProfilesByUserId.get(profile.userId) || []).flatMap(record =>
       [record.bio, record.headline, record.about, record.description, record.summary].filter((value): value is string => typeof value === 'string' && Boolean(value.trim())))
     const generatedPrefill = buildPersonaPrefill({
@@ -155,10 +152,7 @@ export async function listLabProfiles(slot?: PersonaSlot): Promise<LabProfile[]>
       posts: postsByUserId.get(profile.userId) || [],
       analysis: typeof profile.badgeId === 'string' ? analysisByBadgeId.get(profile.badgeId) : null,
     })
-    const prefill = profileTexts.length || postsByUserId.has(profile.userId) || Boolean(typeof profile.badgeId === 'string' && analysisByBadgeId.has(profile.badgeId))
-      ? generatedPrefill
-      : persistedPrefill || generatedPrefill
-    const stored = manual || prefill
+    const stored = manual || generatedPrefill
     profiles.push({
       ...stored,
       name: stored.name || profile.name,
@@ -167,7 +161,7 @@ export async function listLabProfiles(slot?: PersonaSlot): Promise<LabProfile[]>
       role: typeof profile.role === 'string' && !/^\d+$/.test(profile.role) ? profile.role : null,
       avatarUrl: typeof profile.badgeId === 'string' && usersWithPhotos.has(profile.userId) ? `/api/airos/profiles/${encodeURIComponent(profile.badgeId)}/photo` : null,
       source: 'badge_import',
-      prefilled: !manual,
+      prefilled: !manual && Boolean(stored.bio || stored.traits.length || stored.interests.length || stored.style),
     })
     seenUserIds.add(profile.userId)
   }

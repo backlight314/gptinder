@@ -72,8 +72,8 @@ function extractTopics(texts: string[], name: string) {
     .map(([topic]) => titleCase(topic))
 }
 
-function buildStyle(posts: string[], traits: string[]) {
-  if (!posts.length) return 'Use a clear, friendly, conversational tone while keeping claims grounded in the reviewed profile.'
+function buildStyle(posts: string[]) {
+  if (!posts.length) return ''
   const averageWords = posts.reduce((total, post) => total + post.split(/\s+/).filter(Boolean).length, 0) / posts.length
   const questions = posts.filter(post => post.includes('?')).length
   const emojis = posts.filter(post => /[\u{1F300}-\u{1FAFF}]/u.test(post)).length
@@ -86,7 +86,7 @@ function buildStyle(posts: string[], traits: string[]) {
 export function buildPersonaPrefill(seed: PersonaPrefillSeed): ManualPersona {
   const profileTexts = (seed.profileTexts || []).map(text => cleanText(text)).filter(isUsefulText)
   const posts = (seed.posts || []).map(text => cleanText(text, 700)).filter(Boolean).slice(0, 60)
-  const analysisInterests = seed.analysis?.interests || []
+  const analysisInterests = (seed.analysis?.interests || []).filter(interest => !/no (verified )?interests? provided/i.test(interest))
   const topics = extractTopics([...profileTexts, ...posts], seed.name)
   const interests = unique([...analysisInterests, ...topics], 12)
   const traits = unique(
@@ -96,22 +96,20 @@ export function buildPersonaPrefill(seed: PersonaPrefillSeed): ManualPersona {
           posts.some(post => post.includes('?')) ? 'question-driven' : 'conversational',
           posts.some(post => /[\u{1F300}-\u{1FAFF}]/u.test(post)) ? 'expressive' : 'direct',
         ]
-      : ['conversational'],
+      : [],
     12,
   )
   const candidates = [
     cleanText(seed.analysis?.summary),
     profileTexts[0] || '',
-    seed.role ? cleanText(`${seed.role}.`) : '',
-    `Public social profile for ${seed.name}.`,
   ]
-  const bio = candidates.find(isUsefulText) || `Public social profile for ${seed.name}.`
+  const bio = candidates.find(isUsefulText) || ''
   return {
     name: cleanText(seed.name, 80),
-    bio: bio || `Public social profile for ${seed.name}.`,
-    traits: traits.length ? traits : ['conversational'],
-    interests: interests.length ? interests : ['public profile topics'],
-    style: buildStyle(posts, traits),
+    bio,
+    traits,
+    interests,
+    style: buildStyle(posts),
     values: [],
     lifeGoals: { wantChildren: 'not_disclosed', relationshipType: 'not_disclosed' },
     relationshipPreferences: { planning: 'not_disclosed', communication: 'not_disclosed' },

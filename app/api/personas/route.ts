@@ -17,7 +17,9 @@ export async function GET(request: Request) {
     return Response.json({ error: 'Slot must be a or b.' }, { status: 400 })
   }
   try {
-    return Response.json({ profiles: await listLabProfiles(requestedSlot as 'a' | 'b' | undefined) })
+    const currentUserId = await currentAgentContextUserId()
+    const profiles = await listLabProfiles(requestedSlot as 'a' | 'b' | undefined)
+    return Response.json({ profiles: profiles.map(profile => ({ ...profile, owned: profile.userId === currentUserId })) })
   } catch (error) {
     console.error('Persona list failed', error)
     return Response.json(
