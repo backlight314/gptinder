@@ -27,3 +27,4 @@ __pycache__/
 
 # Ingested user data and derived personas (never commit)
 data/
+/.swc
