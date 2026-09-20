@@ -14,7 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.personas import extract  # noqa: E402  (after sys.path tweak)
+from src.personas import extract, mongo_store  # noqa: E402  (after sys.path tweak)
 
 
 def main() -> None:
@@ -42,6 +42,10 @@ def main() -> None:
         print(json.dumps(persona[section], indent=2, ensure_ascii=False))
 
     print(f"\nSaved to {extract.PROCESSED_DIR / (args.user_id + '_persona.json')}")
+    if mongo_store.is_configured():
+        print("MongoDB: save attempted (extracted_personas) - a 'save failed' warning above means it did not land")
+    else:
+        print("MongoDB: NOT saved - set MONGODB_URI in backend/.env")
 
 
 if __name__ == "__main__":

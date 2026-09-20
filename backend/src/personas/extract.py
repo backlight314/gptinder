@@ -18,6 +18,7 @@ from app.schemas import (
     PreferencesProfile,
 )
 
+from . import mongo_store
 from .stats import compute_stats
 
 logger = logging.getLogger(__name__)
@@ -243,5 +244,7 @@ async def build_persona(user_id: str, name: str) -> dict:
     tmp = path.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(persona, indent=2, ensure_ascii=False))
     os.replace(tmp, path)
+
+    await asyncio.to_thread(mongo_store.store_extracted_persona, persona, sources)
     logger.info("build_persona: done in %.1fs", time.perf_counter() - started)
     return persona
