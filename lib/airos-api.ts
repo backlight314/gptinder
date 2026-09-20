@@ -31,16 +31,19 @@ function clientAddress(request: Request) {
     || 'unknown'
 }
 
-function configuredLimit(kind: 'preview' | 'import' | 'analyze') {
-  const fallback = kind === 'preview' ? 30 : kind === 'import' ? 10 : 5
+function configuredLimit(kind: 'preview' | 'import' | 'photo' | 'analyze') {
+  const fallback = kind === 'preview' ? 30 : kind === 'analyze' ? 5 : 10
   const key = `AIROS_${kind.toUpperCase()}_LIMIT_PER_HOUR`
   const value = Number(process.env[key])
   return Number.isInteger(value) && value > 0 && value <= 10_000 ? value : fallback
 }
 
-export async function enforceAirosRateLimit(request: Request, kind: 'preview' | 'import' | 'analyze') {
+export async function enforceAirosRateLimit(request: Request, kind: 'preview' | 'import' | 'photo' | 'analyze') {
+  const hostname = new URL(request.url).hostname
+  const isLocalRequest = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
+  if (isLocalRequest && (kind === 'preview' || kind === 'import' || kind === 'photo')) return
   const salt = process.env.AIROS_RATE_LIMIT_SALT
-    || (process.env.NODE_ENV === 'production' ? null : 'airos-development-only-salt')
+    || (process.env.NODE_ENV !== 'production' || isLocalRequest ? 'airos-development-only-salt' : null)
   if (!salt) throw new AirosHttpError('Anonymous write rate limiting is not configured.', 503)
   const addressHash = createHash('sha256').update(`${salt}:${clientAddress(request)}`).digest('hex')
   const now = Date.now()
