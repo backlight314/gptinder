@@ -21,6 +21,7 @@ const storedProfile = {
   role: 'Builder',
   avatarUrl: null,
   source: 'badge_import',
+  prefilled: true,
 } as const
 
 it('loads stored profiles, selects one, and keeps URL import available', async () => {
@@ -31,9 +32,11 @@ it('loads stored profiles, selects one, and keeps URL import available', async (
   fireEvent.click(screen.getByRole('button', { name: /create the first profile/i }))
 
   expect(await screen.findByText('Stored Person')).toBeInTheDocument()
-  fireEvent.click(screen.getByText('Stored Person'))
+  fireEvent.click(screen.getByRole('button', { name: /stored person.*use this profile/i }))
   expect(screen.getByDisplayValue('Stored Person')).toBeInTheDocument()
   expect(screen.getByDisplayValue('Likes long walks and board games.')).toBeInTheDocument()
+  await waitFor(() => expect(screen.getByText(/Prefilled from stored public profile data and social activity/)).toBeInTheDocument())
+  expect(screen.getByDisplayValue('curious')).toBeInTheDocument()
   expect(screen.getByText('curious · board games')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: /save selected profile/i })).toBeEnabled()
 
