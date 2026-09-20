@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { MongoMemoryServer } from 'mongodb-memory-server'
 import { GET as getPhoto } from '@/app/api/airos/profiles/[badgeId]/photo/route'
 import { resetAirosDemoData } from '@/lib/airos-demo-reset'
-import { getPublicProfile } from '@/lib/airos-directory-store'
+import { getPublicProfile, listPublicProfiles } from '@/lib/airos-directory-store'
 import { getMongoDatabase } from '@/lib/mongodb'
 
 let mongo: MongoMemoryServer
@@ -51,6 +51,8 @@ describe('AIROS profile photo and demo reset', () => {
   it('serves a stable cached social photo through the local profile endpoint', async () => {
     const profile = await getPublicProfile(badgeId)
     expect(profile?.avatarUrl).toBe(`/api/airos/profiles/${badgeId}/photo`)
+    const directory = await listPublicProfiles('', 1)
+    expect(directory.profiles[0]?.avatarUrl).toBe(`/api/airos/profiles/${badgeId}/photo`)
     const response = await getPhoto(new Request(`http://localhost/api/airos/profiles/${badgeId}/photo`), {
       params: Promise.resolve({ badgeId }),
     })
