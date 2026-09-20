@@ -59,14 +59,14 @@ describe('deterministic compatibility', () => {
       summary: 'The exchange was tense but ended with a plan.',
       strengths: ['Both participants made a concrete plan.'],
       considerations: ['The exchange still contained friction.'],
-      analysis: { compatibility: 'weak' as const, friction: 'high' as const, reciprocity: 'weak' as const, pacing: 'mismatched' as const, connection: 'absent' as const, rationale: 'The qualitative evidence is poor.' },
+      analysis: { compatibility: 'weak' as const, friction: 'high' as const, reciprocity: 'weak' as const, pacing: 'mismatched' as const, connection: 'absent' as const, sharedGround: 'unclear' as const, rationale: 'The qualitative evidence is poor.' },
       meetingIntent: 'agreed' as const,
     }
     const result = calculateConversationCompatibility(assessment, assessment)
     expect(result.label).toBe('Conversation analysis score')
     expect(result.score).toBe(1)
     expect(result.meetingIntent).toBe('agreed')
-    expect(result.features).toHaveLength(5)
+    expect(result.features).toHaveLength(6)
   })
 })
 
