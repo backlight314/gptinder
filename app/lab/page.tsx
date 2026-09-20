@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import AIMatchmaker from '@/components/ai-matchmaker'
+import SiteNav from '@/components/site-nav'
 
 export const metadata: Metadata = {
   title: 'AI Lab — Hack the Heart',
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 }
 
 export default function LabPage() {
-  return <AIMatchmaker />
+  return <><SiteNav /><AIMatchmaker /></>
 }

@@ -24,5 +24,5 @@ export default function ProfileAnalyzer({ badgeId }: { badgeId: string }) {
     }
   }
 
-  return <div><button type="button" onClick={analyze} disabled={loading} className="rounded-full bg-primary px-5 py-2.5 font-bold text-primary-foreground disabled:opacity-50">{loading ? 'Analyzing…' : 'Analyze profile'}</button>{message && <p aria-live="polite" className="mt-3 text-sm text-muted-foreground">{message}</p>}</div>
+  return <div><button type="button" onClick={analyze} disabled={loading} className="primary-button disabled:opacity-50 disabled:cursor-wait">{loading ? 'Getting to know them…' : 'Analyze profile'}</button>{message && <p aria-live="polite" className="mt-3 text-sm text-muted-foreground">{message}</p>}</div>
 }
