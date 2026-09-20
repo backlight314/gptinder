@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { SocialImportError, importPublicProfile, parsePublicProfile } from '@/lib/social-import'
 import { storeSocialImport } from '@/lib/social-store'
 import type { SocialPlatform } from '@/lib/social-types'
+import { agentContextAccessCookie, currentAgentContextUserId } from '@/lib/agent-contexts/access'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
@@ -35,6 +36,10 @@ export async function POST(request: Request) {
         { status: 400 },
       )
     }
+    const currentUserId = await currentAgentContextUserId()
+    if (body.data.userId && body.data.userId !== currentUserId) {
+      return Response.json({ error: 'This account is not authorized in the current browser session.' }, { status: 403 })
+    }
 
     const requestedUrls = [...(body.data.url ? [body.data.url] : []), ...(body.data.urls || [])]
     const byPlatform = new Map<SocialPlatform, ParsedProfile>()
@@ -66,7 +71,8 @@ export async function POST(request: Request) {
     }
 
     const primary = storedImports[0]
-    return Response.json({
+    const canAccessAccount = primary.stored.userCreated || currentUserId === primary.stored.userId
+    const response = Response.json({
       profileId: primary.stored.profileId,
       userId,
       storedProfileCount: storedImports.length,
@@ -78,7 +84,11 @@ export async function POST(request: Request) {
       profile: primary.imported.profile,
       profiles: storedImports.map((item) => item.imported.profile),
       posts: primary.imported.posts.map(({ sourceData: _sourceData, ...post }) => post),
+      agentContext: canAccessAccount ? primary.stored.agentContext : undefined,
     })
+    if (canAccessAccount)
+      response.headers.set('Set-Cookie', agentContextAccessCookie(primary.stored.userId))
+    return response
   } catch (error) {
     if (error instanceof SocialImportError) {
       return Response.json({ error: error.message }, { status: error.status })

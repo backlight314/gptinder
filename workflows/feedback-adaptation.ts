@@ -48,6 +48,7 @@ async function adaptParticipant(encounterId: string, key: PersonKey) {
   }))
   const adaptation = await buildReactionAdaptation({
     profile: context.profiles[key],
+    accountContext: context.accountContexts[key],
     model: agentModel(key, 'reaction'),
     outcome: context.outcome,
     messages: messages.filter(message => message.from !== key),
