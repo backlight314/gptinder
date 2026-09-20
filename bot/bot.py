@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 
 import aiohttp
@@ -11,6 +12,7 @@ load_dotenv()
 BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:8000").rstrip("/")
 INGEST_TOKEN = os.environ.get("INGEST_TOKEN", "")
 HISTORY_LIMIT = int(os.environ.get("HISTORY_LIMIT", "500"))
+BUILD_CONCURRENCY = 2  # each build is four LLM calls, so don't fan out across a whole channel at once
 
 
 async def collect_messages(channel, user_id: int, limit: int) -> list[dict]:
@@ -23,6 +25,20 @@ async def collect_messages(channel, user_id: int, limit: int) -> list[dict]:
             )
     messages.reverse()  # history() is newest-first
     return messages
+
+
+async def collect_all_messages(channel, limit: int) -> dict[int, list[dict]]:
+    """Scan the last `limit` messages; group the text messages by human author id (bots and commands skipped)."""
+    by_author: dict[int, list[dict]] = {}
+    async for msg in channel.history(limit=limit):
+        if msg.author.bot or not msg.content.strip() or msg.content.startswith(bot.command_prefix):
+            continue
+        by_author.setdefault(msg.author.id, []).append(
+            {"content": msg.content, "timestamp": msg.created_at.isoformat(), "message_id": str(msg.id)}
+        )
+    for messages in by_author.values():
+        messages.reverse()  # history() is newest-first
+    return by_author
 
 
 async def post_messages(user_id: int, messages: list[dict]) -> dict:
@@ -70,6 +86,22 @@ def persona_summary(persona: dict) -> str:
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
+log = logging.getLogger("discord.gptinder")  # under "discord" so bot.run() gives it a handler
+
+
+@bot.event
+async def on_command(ctx: commands.Context):
+    # Ids and the command name only, never message text.
+    log.info("command !%s from user %s in channel %s", ctx.command, ctx.author.id, ctx.channel.id)
+
+
+@bot.event
+async def on_command_error(ctx: commands.Context, error: commands.CommandError):
+    if isinstance(error, commands.CommandNotFound):
+        return
+    log.error("command !%s failed: %s: %s", ctx.command, type(error).__name__, error)
+    if ctx.command is None or not ctx.command.has_error_handler():
+        await ctx.reply("That command failed - check the bot logs.")
 
 
 @bot.command(name="export")
@@ -88,6 +120,85 @@ async def export(ctx: commands.Context):
     await ctx.reply(
         f"Sent {len(messages)} messages to gptinder ({result['added']} new, {result['total']} total)."
     )
+
+
+async def export_everyone(channel) -> tuple[dict[int, list[dict]], list[int], int]:
+    """Scan the channel and post each person's messages under their own id. Returns (by_author, sent ids, failures)."""
+    by_author = await collect_all_messages(channel, HISTORY_LIMIT)
+    sent: list[int] = []
+    failed = 0
+    for author_id, messages in by_author.items():
+        try:
+            await post_messages(author_id, messages)
+            sent.append(author_id)
+        except (aiohttp.ClientError, asyncio.TimeoutError):
+            failed += 1
+    return by_author, sent, failed
+
+
+@bot.command(name="exportall")
+@commands.guild_only()
+async def export_all(ctx: commands.Context):
+    """Export everyone's messages from this channel, each stored under their own Discord id (any member, server channels only)."""
+    async with ctx.typing():
+        by_author, sent, failed = await export_everyone(ctx.channel)
+    if not by_author:
+        await ctx.reply(f"I didn't find any messages from people in the last {HISTORY_LIMIT} here.")
+        return
+    people = ", ".join(f"<@{author_id}> ({len(by_author[author_id])})" for author_id in sent)
+    note = f" {failed} failed to send." if failed else ""
+    await ctx.reply(
+        f"Exported messages for {len(sent)} people, each saved under their own id: {people}.{note}",
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
+
+
+@bot.command(name="personaall")
+@commands.guild_only()
+async def persona_all(ctx: commands.Context):
+    """Export everyone's messages here and build each person's persona under their own id (any member, server channels only)."""
+    async with ctx.typing():
+        by_author, sent, failed = await export_everyone(ctx.channel)
+        if not by_author:
+            await ctx.reply(f"I didn't find any messages from people in the last {HISTORY_LIMIT} here.")
+            return
+        eligible = sent
+        gate = asyncio.Semaphore(BUILD_CONCURRENCY)
+
+        async def build(author_id: int) -> bool:
+            member = ctx.guild.get_member(author_id)
+            name = (member.display_name if member else f"user-{author_id}")[:100]
+            async with gate:
+                try:
+                    await build_persona(author_id, name)
+                    return True
+                except (aiohttp.ClientError, asyncio.TimeoutError):
+                    return False
+
+        results = await asyncio.gather(*(build(a) for a in eligible))
+    built = sum(results)
+    parts = [f"Built {built} personas, each saved under its own id."]
+    if built < len(eligible):
+        parts.append(f"{len(eligible) - built} failed to build.")
+    if failed:
+        parts.append(f"{failed} exports failed.")
+    await ctx.reply(" ".join(parts))
+
+
+@persona_all.error
+async def persona_all_error(ctx: commands.Context, error: commands.CommandError):
+    if isinstance(error, commands.NoPrivateMessage):
+        await ctx.reply("`!personaall` only works in a server channel.")
+    else:
+        raise error
+
+
+@export_all.error
+async def export_all_error(ctx: commands.Context, error: commands.CommandError):
+    if isinstance(error, commands.NoPrivateMessage):
+        await ctx.reply("`!exportall` only works in a server channel.")
+    else:
+        raise error
 
 
 @bot.command(name="persona")
