@@ -16,6 +16,8 @@ from .schemas import (
     DiscordIngestRequest,
     DiscordIngestResponse,
     Persona,
+    PersonaBuildRequest,
+    PersonaBuildResponse,
     PersonalityRequest,
     ScoreRequest,
     ScoreResponse,
@@ -24,6 +26,7 @@ from .schemas import (
 )
 from .scoring import score_match
 from .whatsapp_parser import WhatsAppParseError, parse_whatsapp_export
+from src.personas import extract as persona_extract, mongo_store
 
 app = FastAPI(title="gptinder backend")
 
@@ -74,6 +77,23 @@ def ingest_whatsapp(
         truncated_messages=truncated,
         dropped_oldest=dropped,
     )
+
+
+@app.post("/personas/{user_id}/build", response_model=PersonaBuildResponse)
+async def build_user_persona(
+    user_id: str, req: PersonaBuildRequest, x_ingest_token: str | None = Header(default=None)
+) -> PersonaBuildResponse:
+    """Build a persona from every ingested source (Discord + WhatsApp) for user_id and upsert it into MongoDB."""
+    _check_ingest_token(x_ingest_token)  # this spends LLM credits, so it is gated like ingestion
+    try:
+        persona = await persona_extract.build_persona(user_id, req.name)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except ExtractionFailed as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return PersonaBuildResponse(**persona, mongo_configured=mongo_store.is_configured())
 
 
 @app.post("/personality", response_model=Persona)
