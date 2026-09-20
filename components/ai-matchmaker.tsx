@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { ArrowRight, Check, ChevronLeft, Database, Heart, Link2, ListOrdered, MessageCircle, RefreshCw, Sparkles, Stars, ThumbsDown, ThumbsUp, UserRound, Zap } from 'lucide-react'
+import ProfileAvatar from './profile-avatar'
 
 type PersonKey = 'a' | 'b'
 type Persona = {
@@ -43,7 +44,17 @@ type AgentContextView = {
   builtAt: string
   updatedAt: string
 }
+type StoredProfile = Persona & {
+  userId: string
+  badgeId: string | null
+  role: string | null
+  avatarUrl: string | null
+  source: 'badge_import' | 'persona'
+  prefilled: boolean
+}
+type PersonaListResponse = { profiles?: StoredProfile[]; error?: string }
 type SocialLinks = { linkedin: string; instagram: string; x: string }
+type ProfileMode = 'stored' | 'new'
 type Step = 'landing' | 'profile-a' | 'profile-b' | 'date' | 'log'
 
 const starterPersonas: Record<PersonKey, Persona> = {
@@ -70,11 +81,12 @@ function Landing({ start, log }: { start: () => void; log: () => void }) {
   return <main className="min-h-screen overflow-hidden bg-transparent"><header className="mx-auto flex max-w-6xl items-center justify-between px-5 py-6 sm:px-8"><button onClick={log} className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"><ListOrdered size={14} /> Conversation log</button></header><section className="relative mx-auto grid max-w-6xl items-center gap-12 px-5 pb-20 pt-12 sm:px-8 lg:grid-cols-[1.05fr_.95fr] lg:gap-20 lg:pb-28 lg:pt-24"><div className="relative z-10"><div className="mb-6 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/8 px-3 py-1.5 text-xs font-semibold text-primary"><Stars size={14} /> Hack the Heart compatibility lab</div><h1 className="max-w-2xl text-5xl font-semibold leading-[.98] tracking-[-.06em] sm:text-7xl">Explore a first conversation between <span className="text-primary">AI selves.</span></h1><p className="mt-7 max-w-lg text-lg leading-relaxed text-muted-foreground">Review two personality snapshots, then watch a private simulation of how they might talk. Nothing is sent to a dating platform or another person.</p><div className="mt-7"><Button onClick={start}>Create the first profile <ArrowRight size={17} /></Button></div></div><div className="relative mx-auto w-full max-w-md"><div className="absolute -inset-8 rounded-full bg-primary/15 blur-3xl" /><div className="relative rounded-[2rem] border border-border bg-card p-6 shadow-2xl shadow-foreground/10"><div className="flex items-center justify-between"><div><p className="text-xs font-semibold uppercase tracking-[.18em] text-muted-foreground">The Hack the Heart lab</p><p className="mt-2 text-2xl font-semibold">A transparent first hello.</p></div><Zap className="text-primary" /></div><div className="mt-8 flex items-center justify-center gap-5"><div className="grid size-16 place-items-center rounded-2xl bg-primary/10 text-primary"><UserRound /></div><Heart className="text-primary" fill="currentColor" size={18} /><div className="grid size-16 place-items-center rounded-2xl bg-accent text-accent-foreground"><MessageCircle /></div></div><div className="mt-8 rounded-2xl bg-muted/60 p-4 text-center text-sm text-muted-foreground">Owner-reviewed details in. A contained simulation out.</div></div></div></section></main>
 }
 
-function CsvField({ id, label, hint, value, onChange }: { id: string; label: string; hint: string; value: string[]; onChange: (items: string[]) => void }) {
+function CsvField({ id, label, hint, value, onChange, disabled = false }: { id: string; label: string; hint: string; value: string[]; onChange: (items: string[]) => void; disabled?: boolean }) {
   const [draft, setDraft] = useState(() => value.join(', '))
   const parse = (input: string) => input.split(',').map(item => item.trim()).filter(Boolean)
+  useEffect(() => { setDraft(value.join(', ')) }, [value])
 
-  return <label className="block" htmlFor={id}><span className="text-sm font-semibold">{label}</span><span className="mt-1 block text-xs text-muted-foreground">{hint}</span><input id={id} value={draft} onChange={event => { setDraft(event.target.value); onChange(parse(event.target.value)) }} onBlur={() => { const items = parse(draft); setDraft(items.join(', ')); onChange(items) }} className="mt-2 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none ring-primary focus:ring-2" /></label>
+  return <label className="block" htmlFor={id}><span className="text-sm font-semibold">{label}</span><span className="mt-1 block text-xs text-muted-foreground">{hint}</span><input id={id} disabled={disabled} value={draft} onChange={event => { setDraft(event.target.value); onChange(parse(event.target.value)) }} onBlur={() => { const items = parse(draft); setDraft(items.join(', ')); onChange(items) }} className="mt-2 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none ring-primary focus:ring-2 disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-70" /></label>
 }
 
 function ProfilePreview({ persona, user }: { persona: Persona; user: PersonKey }) {
@@ -82,12 +94,26 @@ function ProfilePreview({ persona, user }: { persona: Persona; user: PersonKey }
 }
 
 function AgentContextPanel({ context, rebuilding, error, onRebuild }: { context: AgentContextView; rebuilding: boolean; error: string; onRebuild: () => void }) {
-  return <section className="mb-7 rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">Agent prompt</p><h2 className="mt-1 font-semibold">Context revision {context.revision}</h2><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Built {new Date(context.builtAt).toLocaleString()}. Profile and import edits are included only when you rebuild.</p></div><Button variant="secondary" onClick={onRebuild} disabled={rebuilding}>{rebuilding ? 'Rebuilding…' : 'Rebuild my agent prompt'} <RefreshCw size={15} /></Button></div><div className="mt-4 grid gap-2 sm:grid-cols-2">{context.sourceStats.map(stat => <div className="rounded-xl border border-border bg-card/80 p-3 text-xs" key={stat.source}><div className="flex items-center justify-between gap-2"><span className="font-semibold">{stat.source.replace(/([A-Z])/g, ' $1')}</span>{stat.truncated && <span className="text-muted-foreground">shortened</span>}</div><p className="mt-1 text-muted-foreground">{stat.documentsIncluded} included of {stat.documentsRead} read · {stat.charactersIncluded} characters</p></div>)}</div><details className="mt-4"><summary className="cursor-pointer text-xs font-semibold">Preview compiled prompt</summary><pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-xl border border-border bg-background p-3 text-xs leading-relaxed text-muted-foreground">{context.compiledPrompt}</pre></details>{error && <p role="alert" className="mt-3 rounded-xl bg-destructive/10 p-3 text-xs text-destructive">{error}</p>}</section>
+  return <section className="mt-7 rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">Agent prompt</p><h2 className="mt-1 font-semibold">Context revision {context.revision}</h2><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Built {new Date(context.builtAt).toLocaleString()}. Profile and import edits are included only when you rebuild.</p></div><Button variant="secondary" onClick={onRebuild} disabled={rebuilding}>{rebuilding ? 'Rebuilding…' : 'Rebuild my agent prompt'} <RefreshCw size={15} /></Button></div><div className="mt-4 grid gap-2 sm:grid-cols-2">{context.sourceStats.map(stat => <div className="rounded-xl border border-border bg-card/80 p-3 text-xs" key={stat.source}><div className="flex items-center justify-between gap-2"><span className="font-semibold">{stat.source.replace(/([A-Z])/g, ' $1')}</span>{stat.truncated && <span className="text-muted-foreground">shortened</span>}</div><p className="mt-1 text-muted-foreground">{stat.documentsIncluded} included of {stat.documentsRead} read · {stat.charactersIncluded} characters</p></div>)}</div><details className="mt-4"><summary className="cursor-pointer text-xs font-semibold">Preview compiled prompt</summary><pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-xl border border-border bg-background p-3 text-xs leading-relaxed text-muted-foreground">{context.compiledPrompt}</pre></details>{error && <p role="alert" className="mt-3 rounded-xl bg-destructive/10 p-3 text-xs text-destructive">{error}</p>}</section>
+}
+
+function StoredProfileCard({ profile, selected, onSelect }: { profile: StoredProfile; selected: boolean; onSelect: () => void }) {
+  const role = profile.role || 'Hack the North participant'
+  return <button type="button" aria-pressed={selected} onClick={onSelect} className={`rounded-2xl border p-3 text-left transition-all hover:-translate-y-0.5 hover:border-primary/40 ${selected ? 'border-primary bg-primary/8 shadow-sm' : 'border-border bg-card'}`}>
+    <div className="flex items-center gap-3"><ProfileAvatar name={profile.name} src={profile.avatarUrl} /><div className="min-w-0"><p className="truncate text-sm font-semibold">{profile.name}</p><p className="truncate text-xs text-muted-foreground">{role}</p></div></div>
+    {profile.badgeId && <p className="mt-3 truncate font-mono text-[10px] text-muted-foreground">{profile.badgeId}</p>}
+    <p className="mt-3 text-[10px] font-semibold uppercase tracking-wider text-primary">{selected ? 'Selected' : 'Use this profile'}{profile.prefilled && !selected ? ' · prefilled' : ''}</p>
+  </button>
 }
 
 function Profile({ user, initial, initialUserId, next, onUserId, back }: { user: PersonKey; initial: Persona; initialUserId?: string; next: (persona: Persona, userId: string) => void; onUserId: (userId: string) => void; back: () => void }) {
   const [persona, setPersona] = useState(initial)
   const [links, setLinks] = useState<SocialLinks>({ linkedin: '', instagram: '', x: '' })
+  const [storedProfiles, setStoredProfiles] = useState<StoredProfile[]>([])
+  const [loadingStored, setLoadingStored] = useState(true)
+  const [storedError, setStoredError] = useState('')
+  const [mode, setMode] = useState<ProfileMode>(initialUserId ? 'stored' : user === 'b' ? 'stored' : 'new')
+  const [selectedPrefilled, setSelectedPrefilled] = useState(false)
   const [consent, setConsent] = useState(false)
   const [importing, setImporting] = useState(false)
   const [importError, setImportError] = useState('')
@@ -98,11 +124,65 @@ function Profile({ user, initial, initialUserId, next, onUserId, back }: { user:
   const [rebuildingContext, setRebuildingContext] = useState(false)
   const [contextError, setContextError] = useState('')
   const [userId, setUserId] = useState<string | undefined>(initialUserId)
-  const isValid = Boolean(persona.name.trim() && persona.bio.trim() && persona.style.trim() && persona.traits.length && persona.interests.length && persona.values.length)
+  const canEdit = user === 'a'
+  const isValid = Boolean(persona.name.trim() && persona.bio.trim() && persona.style.trim() && persona.traits.length && persona.interests.length)
   const urls = Object.values(links).map((value) => value.trim()).filter(Boolean)
   const linksNeedImport = urls.length > 0 && !userId
   const change = <K extends keyof Persona>(key: K, value: Persona[K]) => setPersona(current => ({ ...current, [key]: value }))
   const changeLink = (platform: keyof SocialLinks, value: string) => setLinks(current => ({ ...current, [platform]: value }))
+
+  useEffect(() => {
+    let active = true
+    setLoadingStored(true)
+    setStoredError('')
+    fetch(`/api/personas?slot=${user}`, { cache: 'no-store' })
+      .then(async response => {
+        const data = await response.json().catch(() => ({})) as PersonaListResponse
+        if (!response.ok) throw new Error(data.error ?? 'Unable to load stored profiles.')
+        if (active) setStoredProfiles(data.profiles ?? [])
+      })
+      .catch(reason => {
+        if (active) setStoredError(reason instanceof Error ? reason.message : 'Unable to load stored profiles.')
+      })
+      .finally(() => { if (active) setLoadingStored(false) })
+    return () => { active = false }
+  }, [user])
+
+  const selectStoredProfile = (profile: StoredProfile) => {
+    setMode('stored')
+    setPersona({
+      name: profile.name,
+      bio: profile.bio,
+      traits: [...profile.traits],
+      interests: [...profile.interests],
+      style: profile.style,
+      values: [...profile.values],
+      lifeGoals: { ...profile.lifeGoals },
+      relationshipPreferences: { ...profile.relationshipPreferences },
+    })
+    setUserId(profile.userId)
+    setSelectedPrefilled(profile.prefilled)
+    onUserId(profile.userId)
+    setLinks({ linkedin: '', instagram: '', x: '' })
+    setConsent(false)
+    setImportError('')
+    setImportStatus('')
+    setSaveError('')
+  }
+
+  const startNewProfile = () => {
+    if (!canEdit) return
+    setMode('new')
+    setPersona({ ...starterPersonas[user], lifeGoals: { ...starterPersonas[user].lifeGoals }, relationshipPreferences: { ...starterPersonas[user].relationshipPreferences }, traits: [], interests: [], values: [] })
+    setUserId(undefined)
+    setSelectedPrefilled(false)
+    onUserId('')
+    setLinks({ linkedin: '', instagram: '', x: '' })
+    setConsent(false)
+    setImportError('')
+    setImportStatus('')
+    setSaveError('')
+  }
 
   const importProfiles = async () => {
     setImporting(true)
@@ -166,7 +246,7 @@ function Profile({ user, initial, initialUserId, next, onUserId, back }: { user:
     }
   }
 
-  const canSave = isValid && !saving
+  const canSave = isValid && !saving && (canEdit || Boolean(userId))
 
   return (
     <main className="min-h-screen bg-transparent">
@@ -179,11 +259,20 @@ function Profile({ user, initial, initialUserId, next, onUserId, back }: { user:
         <div className="mb-8 max-w-2xl">
           <p className="mb-2 text-xs font-semibold uppercase tracking-[.18em] text-primary">{user === 'a' ? 'Person one' : 'Person two'}</p>
           <h1 className="text-4xl font-semibold tracking-tight">Review {user === 'a' ? 'the first' : 'the second'} personality.</h1>
-          <p className="mt-2 text-muted-foreground">Store owner-approved social data in MongoDB. The personality fields stay entirely user-authored.</p>
+          <p className="mt-2 text-muted-foreground">Choose someone already in the directory for a conservative public-data draft, or import a new profile and write the details yourself.</p>
         </div>
-        <div className="grid gap-6 lg:grid-cols-[1.1fr_.9fr]">
+        <div className="grid items-start gap-6 lg:grid-cols-2">
+          <section className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-7">
+            <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[.18em] text-primary">Choose a person</p><h2 className="mt-2 text-xl font-semibold">{user === 'a' ? 'Person one' : 'Person two'} from your stored profiles</h2><p className="mt-1 text-xs text-muted-foreground">{user === 'a' ? 'These cards use the same people and badge identities as the home directory.' : 'Choose a stored person to review their prefilled public profile.'}</p></div>{canEdit && <Button variant={mode === 'new' ? 'primary' : 'secondary'} onClick={startNewProfile}><Link2 size={16} /> Import a new profile</Button>}</div>
+            {loadingStored && <p className="mt-5 text-sm text-muted-foreground">Loading stored profiles…</p>}
+            {storedError && <p role="alert" className="mt-5 rounded-xl bg-destructive/10 p-3 text-xs text-destructive">{storedError}</p>}
+            {!loadingStored && !storedError && storedProfiles.length === 0 && <p className="mt-5 rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">No stored profiles yet. Import a new profile to get started.</p>}
+            {!loadingStored && storedProfiles.length > 0 && <div className="mt-5 grid gap-3 sm:grid-cols-2">{storedProfiles.map(profile => <StoredProfileCard key={`${profile.userId}-${profile.badgeId ?? 'persona'}`} profile={profile} selected={mode === 'stored' && profile.userId === userId} onSelect={() => selectStoredProfile(profile)} />)}</div>}
+            {mode === 'new' && <p className="mt-4 text-xs text-muted-foreground">New profile mode is active. Add the required URLs and personality details below.</p>}
+            {!canEdit && !userId && <p className="mt-4 text-xs text-muted-foreground">Person Two uses an existing stored profile and cannot create or edit a new persona here.</p>}
+          </section>
           <form onSubmit={event => { event.preventDefault(); if (isValid && !saving) void savePersona() }} className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-8">
-            <section className="mb-7 rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-5">
+            {mode === 'new' ? <section className="rounded-3xl border border-primary/20 bg-primary/5 p-5 shadow-sm sm:p-7">
               <div className="flex items-start gap-3">
                 <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground"><Link2 size={17} /></span>
                 <div><h2 className="font-semibold">Store social profiles</h2><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Add one profile per platform. This stores raw profile data, posts, and comments without changing the personality below or creating duplicates.</p></div>
@@ -210,30 +299,34 @@ function Profile({ user, initial, initialUserId, next, onUserId, back }: { user:
               </div>
               {importStatus && <p role="status" className="mt-4 rounded-xl bg-emerald-500/10 p-3 text-xs leading-relaxed text-emerald-700 dark:text-emerald-300">{importStatus}</p>}
               {importError && <p role="alert" className="mt-4 rounded-xl bg-destructive/10 p-3 text-xs leading-relaxed text-destructive">{importError}</p>}
-            </section>
+            </section> : <section className="rounded-3xl border border-primary/20 bg-primary/5 p-5 shadow-sm sm:p-7"><div className="flex items-start gap-3"><span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground"><Check size={17} /></span><div><h2 className="font-semibold">Stored profile selected</h2><p className="mt-1 text-xs leading-relaxed text-muted-foreground">{selectedPrefilled ? 'Prefilled from stored public profile data and social activity.' : 'Review the stored personality snapshot below.'} {canEdit ? 'You can edit it before saving.' : 'Person Two can review it but cannot edit it here.'}</p></div></div><dl className="mt-5 space-y-3 text-sm"><div><dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Name</dt><dd className="mt-1 font-semibold">{persona.name || 'No name available.'}</dd></div><div><dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Bio</dt><dd className="mt-1 leading-relaxed">{persona.bio || 'No public bio available.'}</dd></div><div><dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Traits and interests</dt><dd className="mt-1 leading-relaxed">{[...persona.traits, ...persona.interests].length ? [...persona.traits, ...persona.interests].join(' · ') : 'Not disclosed.'}</dd></div><div><dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Values and conversation style</dt><dd className="mt-1 leading-relaxed">{[...persona.values, persona.style].filter(Boolean).join(' · ') || 'Values not disclosed.'}</dd></div></dl>{canEdit && <div className="mt-5 border-t border-primary/15 pt-4"><Button variant="secondary" onClick={startNewProfile}><Link2 size={16} /> Import a different profile from URLs</Button></div>}</section>}
             {agentContext && <AgentContextPanel context={agentContext} rebuilding={rebuildingContext} error={contextError} onRebuild={() => { void rebuildAgentContext() }} />}
+            <div className="mt-7 border-t border-border pt-7">
             <div className="grid gap-5">
-              <label htmlFor={`name-${user}`}><span className="text-sm font-semibold">Name</span><input id={`name-${user}`} required maxLength={80} value={persona.name} onChange={event => change('name', event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none ring-primary focus:ring-2" /></label>
-              <label htmlFor={`bio-${user}`}><span className="text-sm font-semibold">Bio</span><span className="mt-1 block text-xs text-muted-foreground">A short, factual self-description.</span><textarea id={`bio-${user}`} required maxLength={600} rows={4} value={persona.bio} onChange={event => change('bio', event.target.value)} className="mt-2 w-full resize-y rounded-xl border border-border bg-background p-3 text-sm outline-none ring-primary focus:ring-2" /></label>
-              <div className="grid gap-5 sm:grid-cols-2"><CsvField id={`traits-${user}`} label="Traits" hint="Comma-separated, for example: warm, direct" value={persona.traits} onChange={items => change('traits', items)} /><CsvField id={`interests-${user}`} label="Interests" hint="Comma-separated conversation material" value={persona.interests} onChange={items => change('interests', items)} /></div>
-              <label htmlFor={`style-${user}`}><span className="text-sm font-semibold">Conversation style</span><span className="mt-1 block text-xs text-muted-foreground">Describe tone, pacing, humor, and message length.</span><textarea id={`style-${user}`} required maxLength={400} rows={3} value={persona.style} onChange={event => change('style', event.target.value)} className="mt-2 w-full resize-y rounded-xl border border-border bg-background p-3 text-sm outline-none ring-primary focus:ring-2" /></label>
-              <CsvField id={`values-${user}`} label="Personal values" hint="Explicit values, for example: benevolence, achievement" value={persona.values} onChange={items => change('values', items)} />
+              <label htmlFor={`name-${user}`}><span className="text-sm font-semibold">Name</span><input id={`name-${user}`} required disabled={!canEdit} maxLength={80} value={persona.name} onChange={event => change('name', event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none ring-primary focus:ring-2 disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-70" /></label>
+              <label htmlFor={`bio-${user}`}><span className="text-sm font-semibold">Bio</span><span className="mt-1 block text-xs text-muted-foreground">A short, factual self-description.</span><textarea id={`bio-${user}`} required disabled={!canEdit} maxLength={600} rows={4} value={persona.bio} onChange={event => change('bio', event.target.value)} className="mt-2 w-full resize-y rounded-xl border border-border bg-background p-3 text-sm outline-none ring-primary focus:ring-2 disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-70" /></label>
+              <div className="grid gap-5 sm:grid-cols-2"><CsvField disabled={!canEdit} id={`traits-${user}`} label="Traits" hint="Comma-separated, for example: warm, direct" value={persona.traits} onChange={items => change('traits', items)} /><CsvField disabled={!canEdit} id={`interests-${user}`} label="Interests" hint="Comma-separated conversation material" value={persona.interests} onChange={items => change('interests', items)} /></div>
+              <label htmlFor={`style-${user}`}><span className="text-sm font-semibold">Conversation style</span><span className="mt-1 block text-xs text-muted-foreground">Describe tone, pacing, humor, and message length.</span><textarea id={`style-${user}`} required disabled={!canEdit} maxLength={400} rows={3} value={persona.style} onChange={event => change('style', event.target.value)} className="mt-2 w-full resize-y rounded-xl border border-border bg-background p-3 text-sm outline-none ring-primary focus:ring-2 disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-70" /></label>
+              <CsvField disabled={!canEdit} id={`values-${user}`} label="Personal values" hint="Explicit values, for example: benevolence, achievement" value={persona.values} onChange={items => change('values', items)} />
               <fieldset className="rounded-2xl border border-border p-4">
                 <legend className="px-2 text-sm font-semibold">Confirmed goals and preferences</legend>
                 <p className="mb-4 text-xs leading-relaxed text-muted-foreground">Choose only answers this person has explicitly approved. Unknown answers stay undisclosed.</p>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="text-xs font-semibold">Children<select value={persona.lifeGoals.wantChildren} onChange={event => change('lifeGoals', { ...persona.lifeGoals, wantChildren: event.target.value as Persona['lifeGoals']['wantChildren'] })} className="mt-2 h-10 w-full rounded-xl border border-border bg-background px-3 text-sm font-normal"><option value="not_disclosed">Not disclosed</option><option value="yes">Wants children</option><option value="no">Does not want children</option><option value="unsure">Unsure</option></select></label>
-                  <label className="text-xs font-semibold">Relationship type<select value={persona.lifeGoals.relationshipType} onChange={event => change('lifeGoals', { ...persona.lifeGoals, relationshipType: event.target.value as Persona['lifeGoals']['relationshipType'] })} className="mt-2 h-10 w-full rounded-xl border border-border bg-background px-3 text-sm font-normal"><option value="not_disclosed">Not disclosed</option><option value="monogamous">Monogamous</option><option value="non_monogamous">Non monogamous</option><option value="unsure">Unsure</option></select></label>
-                  <label className="text-xs font-semibold">Planning style<select value={persona.relationshipPreferences.planning} onChange={event => change('relationshipPreferences', { ...persona.relationshipPreferences, planning: event.target.value as Persona['relationshipPreferences']['planning'] })} className="mt-2 h-10 w-full rounded-xl border border-border bg-background px-3 text-sm font-normal"><option value="not_disclosed">Not disclosed</option><option value="planned">Planned</option><option value="flexible">Flexible</option><option value="spontaneous">Spontaneous</option></select></label>
-                  <label className="text-xs font-semibold">Communication rhythm<select value={persona.relationshipPreferences.communication} onChange={event => change('relationshipPreferences', { ...persona.relationshipPreferences, communication: event.target.value as Persona['relationshipPreferences']['communication'] })} className="mt-2 h-10 w-full rounded-xl border border-border bg-background px-3 text-sm font-normal"><option value="not_disclosed">Not disclosed</option><option value="frequent">Frequent</option><option value="balanced">Balanced</option><option value="space">More space</option></select></label>
+                  <label className="text-xs font-semibold">Children<select disabled={!canEdit} value={persona.lifeGoals.wantChildren} onChange={event => change('lifeGoals', { ...persona.lifeGoals, wantChildren: event.target.value as Persona['lifeGoals']['wantChildren'] })} className="mt-2 h-10 w-full rounded-xl border border-border bg-background px-3 text-sm font-normal disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-70"><option value="not_disclosed">Not disclosed</option><option value="yes">Wants children</option><option value="no">Does not want children</option><option value="unsure">Unsure</option></select></label>
+                  <label className="text-xs font-semibold">Relationship type<select disabled={!canEdit} value={persona.lifeGoals.relationshipType} onChange={event => change('lifeGoals', { ...persona.lifeGoals, relationshipType: event.target.value as Persona['lifeGoals']['relationshipType'] })} className="mt-2 h-10 w-full rounded-xl border border-border bg-background px-3 text-sm font-normal disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-70"><option value="not_disclosed">Not disclosed</option><option value="monogamous">Monogamous</option><option value="non_monogamous">Non monogamous</option><option value="unsure">Unsure</option></select></label>
+                  <label className="text-xs font-semibold">Planning style<select disabled={!canEdit} value={persona.relationshipPreferences.planning} onChange={event => change('relationshipPreferences', { ...persona.relationshipPreferences, planning: event.target.value as Persona['relationshipPreferences']['planning'] })} className="mt-2 h-10 w-full rounded-xl border border-border bg-background px-3 text-sm font-normal disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-70"><option value="not_disclosed">Not disclosed</option><option value="planned">Planned</option><option value="flexible">Flexible</option><option value="spontaneous">Spontaneous</option></select></label>
+                  <label className="text-xs font-semibold">Communication rhythm<select disabled={!canEdit} value={persona.relationshipPreferences.communication} onChange={event => change('relationshipPreferences', { ...persona.relationshipPreferences, communication: event.target.value as Persona['relationshipPreferences']['communication'] })} className="mt-2 h-10 w-full rounded-xl border border-border bg-background px-3 text-sm font-normal disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-70"><option value="not_disclosed">Not disclosed</option><option value="frequent">Frequent</option><option value="balanced">Balanced</option><option value="space">More space</option></select></label>
                 </div>
               </fieldset>
             </div>
             {saveError && <p role="alert" className="mt-5 rounded-xl bg-destructive/10 p-3 text-xs leading-relaxed text-destructive">{saveError}</p>}
             {linksNeedImport && <p className="mt-5 rounded-xl bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-700 dark:text-amber-300">Social links are entered but not imported yet. You can save this persona now; use Store social data to attach them to the same user record later.</p>}
-            <div className="mt-8 flex justify-end"><Button type="submit" disabled={!canSave}>{saving ? 'Saving persona…' : 'Save persona and continue'} <ArrowRight size={17} /></Button></div>
+            <div className="mt-8 flex justify-end"><Button type="submit" disabled={!canSave}>{saving ? 'Saving persona…' : !canEdit ? 'Use selected profile and continue' : mode === 'stored' ? 'Save selected profile and continue' : 'Save persona and continue'} <ArrowRight size={17} /></Button></div>
+            </div>
           </form>
-          <ProfilePreview persona={persona} user={user} />
+          <div className="lg:col-start-2">
+            <ProfilePreview persona={persona} user={user} />
+          </div>
         </div>
       </div>
     </main>
@@ -452,7 +545,7 @@ export default function AIMatchmaker() {
     setStep(user === 'a' ? 'profile-b' : 'date')
   }
   const rememberUserId = (user: PersonKey) => (userId: string) => {
-    setUserIds(current => ({ ...current, [user]: userId }))
+    setUserIds(current => ({ ...current, [user]: userId || undefined }))
   }
   const openLog = () => {
     setOpenEncounterId(null)
