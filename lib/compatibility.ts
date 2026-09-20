@@ -4,7 +4,7 @@ export type MeetingIntent = 'agreed' | 'interested' | 'declined' | 'unclear'
 export type ConversationScenario = 'natural' | 'friction'
 export type { CompatibilityAnalysis, CompatibilityVerdict }
 
-export const CONVERSATION_TURNS = 10
+export const CONVERSATION_TURNS = 6
 
 export const scenarioInstructions: Record<ConversationScenario, string> = {
   natural: `Treat this as mutual discovery, not a performance of chemistry. Be genuinely curious: build on a specific shared interest or value when one appears, ask a focused question that could reveal meaningful common ground, and propose a small, low-pressure idea only when it follows from concrete shared evidence. Do not manufacture agreement, attraction, or a plan merely to keep the exchange warm. If the conversation reveals repeated, concrete incompatibilities in values, preferences, communication pace, or goals—and no meaningful shared ground—respond honestly and kindly that this does not feel like a fit. A respectful decline is a valid outcome. Do not treat missing information or a short conversation as incompatibility: when evidence is thin, remain curious or uncertain rather than rejecting.`,
