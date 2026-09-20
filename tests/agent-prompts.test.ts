@@ -58,6 +58,9 @@ describe('agent API contracts', () => {
     expect(request.instructions).toContain('build on shared ground')
     expect(request.instructions).toContain('brief, kind, direct decline')
     expect(request.instructions).toContain('under 80 words')
+    expect(request.instructions).toContain('belong only to the person speaking')
+    expect(request.instructions).toContain('never present them as facts about the other person')
+    expect(request.instructions).toContain('On the opening turn, no counterpart facts have been mentioned')
   })
 
   it('rejects incomplete output even if a partial parse exists', async () => {

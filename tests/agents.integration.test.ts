@@ -89,6 +89,27 @@ async function conversation() {
 }
 
 describe('MongoDB agent lifecycle', () => {
+  it('ignores unavailable interpreter message evidence without failing the turn', async () => {
+    vi.mocked(agents.interpretMessage).mockImplementationOnce(async ({ profile, incomingMessage }) => ({
+      literalMeaning: incomingMessage.text, possibleIntent: 'Possibly proposing a quiet meeting.',
+      fourLensAnalysis: {
+        behavior: { signal: 'May enjoy a quiet setting.' },
+        interpersonal: { messageWarmth: 'medium', messageDominance: 'low', signal: 'A tentative invitation.' },
+        attachmentRegulation: { possibleActivation: 'low', reason: 'No established attachment score.' },
+        values: { relevantPreferences: [], signal: 'Preferences remain uncertain.' },
+      },
+      possibleUserReaction: { state: 'curious', strength: 'low' }, recommendedApproach: 'ask_question',
+      openQuestion: '', uncertainty: 'high', evidenceIds: [profile.evidence[0].id],
+      messageEvidence: [{ messageId: 'missing:message', quote: 'not in the incoming message' }],
+      temporaryState: { engagement: 'medium', comfort: 'medium', tensionTopics: [], positiveTopics: [], unresolvedQuestions: [], boundariesTriggered: [] },
+    }))
+
+    const id = await conversation()
+    const reaction = await database.collection('agent_reactions').findOne({ encounterId: id })
+
+    expect(reaction?.interpretation.messageEvidence).toEqual([])
+  })
+
   it('freezes account-context snapshots, makes no runtime builder calls, and persists idempotent turns', async () => {
     const id = await conversation()
     const loaded = await loadEncounter(id)

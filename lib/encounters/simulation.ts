@@ -15,10 +15,13 @@ function keyForSequence(sequence: number): PersonKey {
   return sequence % 2 === 0 ? 'a' : 'b'
 }
 
-function validateMessageEvidence(interpretation: SocialInterpretation, message: { _id: unknown; text?: unknown }) {
-  for (const item of interpretation.messageEvidence) {
-    if (item.messageId !== String(message._id) || typeof message.text !== 'string' || !message.text.includes(item.quote))
-      throw new Error('Interpreter cited message evidence that does not exist')
+function keepMatchingMessageEvidence(interpretation: SocialInterpretation, message: { _id: unknown; text?: unknown }) {
+  const messageId = String(message._id)
+  const messageText = typeof message.text === 'string' ? message.text : ''
+  return {
+    ...interpretation,
+    // Evidence citations are helpful provenance, but a model mismatch should not stop a conversation turn.
+    messageEvidence: interpretation.messageEvidence.filter(item => item.messageId === messageId && messageText.includes(item.quote)),
   }
 }
 
@@ -69,7 +72,7 @@ export async function runConversationTurn(encounterId: string, sequence: number)
         adaptationGuidance: interpreterGuidanceText(adaptation),
       }))
       validateProfileEvidence(profile, interpretation.evidenceIds)
-      validateMessageEvidence(interpretation, incoming)
+      interpretation = keepMatchingMessageEvidence(interpretation, incoming)
       reactionId = await saveReaction({
         encounterId, ownerUserId: profile.userId, inputMessageId: String(incoming._id),
         profileVersionId: profile.profileVersionId,
