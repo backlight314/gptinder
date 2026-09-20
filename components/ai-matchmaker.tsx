@@ -128,7 +128,7 @@ function Profile({ user, initial, initialUserId, next, onUserId, back, selectedP
   const [contextError, setContextError] = useState('')
   const [userId, setUserId] = useState<string | undefined>(initialUserId)
   const canCreate = user === 'a'
-  const canEdit = canCreate
+  const canEdit = true
   const isValid = Boolean(persona.name.trim() && persona.bio.trim() && persona.style.trim() && persona.traits.length && persona.interests.length)
   const urls = Object.values(links).map((value) => value.trim()).filter(Boolean)
   const linksNeedImport = urls.length > 0 && !userId
@@ -214,10 +214,6 @@ function Profile({ user, initial, initialUserId, next, onUserId, back, selectedP
   }
 
   const savePersona = async () => {
-    if (mode === 'stored' && userId && !canEdit) {
-      next(persona, userId)
-      return
-    }
     setSaving(true)
     setSaveError('')
     try {
@@ -272,13 +268,12 @@ function Profile({ user, initial, initialUserId, next, onUserId, back, selectedP
         </div>
         <div className="grid items-start gap-6 lg:grid-cols-2">
           <section className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-7">
-              <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[.18em] text-primary">Choose a person</p><h2 className="mt-2 text-xl font-semibold">{user === 'a' ? 'Person one' : 'Person two'} from your stored profiles</h2><p className="mt-1 text-xs text-muted-foreground">{user === 'a' ? 'Select any stored profile and edit its details, or import a new profile.' : 'Choose a stored person to review their prefilled public profile.'}</p></div>{canCreate && <Button variant={mode === 'new' ? 'primary' : 'secondary'} onClick={startNewProfile}><Link2 size={16} /> Import a new profile</Button>}</div>
+              <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[.18em] text-primary">Choose a person</p><h2 className="mt-2 text-xl font-semibold">{user === 'a' ? 'Person one' : 'Person two'} from your stored profiles</h2><p className="mt-1 text-xs text-muted-foreground">Select any stored profile and edit its details.{canCreate ? ' You can also import a new profile.' : ''}</p></div>{canCreate && <Button variant={mode === 'new' ? 'primary' : 'secondary'} onClick={startNewProfile}><Link2 size={16} /> Import a new profile</Button>}</div>
             {loadingStored && <p className="mt-5 text-sm text-muted-foreground">Loading stored profiles…</p>}
             {storedError && <p role="alert" className="mt-5 rounded-xl bg-destructive/10 p-3 text-xs text-destructive">{storedError}</p>}
             {!loadingStored && !storedError && storedProfiles.length === 0 && <p className="mt-5 rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">No stored profiles yet. Import a new profile to get started.</p>}
             {!loadingStored && storedProfiles.length > 0 && <div className="mt-5 grid gap-3 sm:grid-cols-2">{storedProfiles.map(profile => <StoredProfileCard key={`${profile.userId}-${profile.badgeId ?? 'persona'}`} profile={profile} selected={mode === 'stored' && profile.userId === userId} onSelect={() => selectStoredProfile(profile)} />)}</div>}
             {mode === 'new' && <p className="mt-4 text-xs text-muted-foreground">New profile mode is active. Add the required URLs and personality details below.</p>}
-            {!canEdit && !userId && <p className="mt-4 text-xs text-muted-foreground">Person Two uses an existing stored profile and cannot create or edit a new persona here.</p>}
           </section>
           <form onSubmit={event => { event.preventDefault(); if (isValid && !saving) void savePersona() }} className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-8">
             {mode === 'new' ? <section className="rounded-3xl border border-primary/20 bg-primary/5 p-5 shadow-sm sm:p-7">
@@ -308,7 +303,7 @@ function Profile({ user, initial, initialUserId, next, onUserId, back, selectedP
               </div>
               {importStatus && <p role="status" className="mt-4 rounded-xl bg-emerald-500/10 p-3 text-xs leading-relaxed text-emerald-700 dark:text-emerald-300">{importStatus}</p>}
               {importError && <p role="alert" className="mt-4 rounded-xl bg-destructive/10 p-3 text-xs leading-relaxed text-destructive">{importError}</p>}
-            </section> : <section className="rounded-3xl border border-primary/20 bg-primary/5 p-5 shadow-sm sm:p-7"><div className="flex items-start gap-3"><span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground"><Check size={17} /></span><div><h2 className="font-semibold">Stored profile selected</h2><p className="mt-1 text-xs leading-relaxed text-muted-foreground">{selectedPrefilled ? 'Prefilled only from reviewed public profile data and social activity.' : 'No unsupported details were filled in automatically.'} {canEdit ? 'You can edit it before saving.' : 'Person Two can review it but cannot edit it here.'}</p></div></div><dl className="mt-5 space-y-3 text-sm"><div><dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Name</dt><dd className="mt-1 font-semibold">{persona.name || 'No name available.'}</dd></div><div><dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Bio</dt><dd className="mt-1 leading-relaxed">{persona.bio || 'No public bio available.'}</dd></div><div><dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Traits and interests</dt><dd className="mt-1 leading-relaxed">{[...persona.traits, ...persona.interests].length ? [...persona.traits, ...persona.interests].join(' · ') : 'Not disclosed.'}</dd></div><div><dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Values and conversation style</dt><dd className="mt-1 leading-relaxed">{[...persona.values, persona.style].filter(Boolean).join(' · ') || 'Values not disclosed.'}</dd></div></dl>{canCreate && <div className="mt-5 border-t border-primary/15 pt-4"><Button variant="secondary" onClick={startNewProfile}><Link2 size={16} /> Import a different profile from URLs</Button></div>}</section>}
+            </section> : <section className="rounded-3xl border border-primary/20 bg-primary/5 p-5 shadow-sm sm:p-7"><div className="flex items-start gap-3"><span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground"><Check size={17} /></span><div><h2 className="font-semibold">Stored profile selected</h2><p className="mt-1 text-xs leading-relaxed text-muted-foreground">{selectedPrefilled ? 'Prefilled only from reviewed public profile data and social activity.' : 'No unsupported details were filled in automatically.'} You can edit it before saving.</p></div></div><dl className="mt-5 space-y-3 text-sm"><div><dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Name</dt><dd className="mt-1 font-semibold">{persona.name || 'No name available.'}</dd></div><div><dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Bio</dt><dd className="mt-1 leading-relaxed">{persona.bio || 'No public bio available.'}</dd></div><div><dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Traits and interests</dt><dd className="mt-1 leading-relaxed">{[...persona.traits, ...persona.interests].length ? [...persona.traits, ...persona.interests].join(' · ') : 'Not disclosed.'}</dd></div><div><dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Values and conversation style</dt><dd className="mt-1 leading-relaxed">{[...persona.values, persona.style].filter(Boolean).join(' · ') || 'Values not disclosed.'}</dd></div></dl>{canCreate && <div className="mt-5 border-t border-primary/15 pt-4"><Button variant="secondary" onClick={startNewProfile}><Link2 size={16} /> Import a different profile from URLs</Button></div>}</section>}
             {agentContext && <AgentContextPanel context={agentContext} rebuilding={rebuildingContext} error={contextError} onRebuild={() => { void rebuildAgentContext() }} />}
             <div className="mt-7 border-t border-border pt-7">
             <div className="grid gap-5">
@@ -330,7 +325,7 @@ function Profile({ user, initial, initialUserId, next, onUserId, back, selectedP
             </div>
             {saveError && <p role="alert" className="mt-5 rounded-xl bg-destructive/10 p-3 text-xs leading-relaxed text-destructive">{saveError}</p>}
             {linksNeedImport && <p className="mt-5 rounded-xl bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-700 dark:text-amber-300">Social links are entered but not imported yet. You can save this persona now; use Store social data to attach them to the same user record later.</p>}
-            <div className="mt-8 flex justify-end"><Button type="submit" disabled={!canSave}>{saving ? 'Saving persona…' : !canEdit ? 'Use selected profile and continue' : mode === 'stored' ? 'Save selected profile and continue' : 'Save persona and continue'} <ArrowRight size={17} /></Button></div>
+            <div className="mt-8 flex justify-end"><Button type="submit" disabled={!canSave}>{saving ? 'Saving persona…' : mode === 'stored' ? 'Save selected profile and continue' : 'Save persona and continue'} <ArrowRight size={17} /></Button></div>
             </div>
           </form>
           <div className="lg:col-start-2">
