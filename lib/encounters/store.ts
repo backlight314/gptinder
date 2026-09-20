@@ -5,10 +5,10 @@ import { randomUUID } from 'node:crypto'
 import { getMongoDatabase } from '@/lib/agents/database'
 import { buildFrozenProfile } from '@/lib/psychology/profile'
 import { manualPersonaSchema, type FrozenProfile, type PersonKey, type SocialInterpretation } from '@/lib/psychology/schemas'
-import { loadVoiceProfile } from '@/lib/voice/evidence'
-import type { VoiceProfile, VoicePromptBuilderOutput } from '@/lib/voice/schemas'
 import { adaptationByVersionId, latestAdaptation } from '@/lib/learning/store'
 import type { StoredAdaptation } from '@/lib/learning/schemas'
+import { snapshotRequiredAgentContext } from '@/lib/agent-contexts/store'
+import type { AgentContextSnapshot } from '@/lib/agent-contexts/schemas'
 
 export const DEFAULT_SCENARIO = 'Plan a first Saturday afternoon date while discussing the activity, social setting, communication style, and advance planning.'
 
@@ -17,8 +17,8 @@ export type EncounterParticipant = {
   userId: string
   name: string
   profileVersionId: string
-  voiceProfileVersionId: string
   adaptationVersionId: string | null
+  agentContextRevision: number
 }
 type StringIdDocument = { _id: string; [key: string]: any }
 
@@ -38,33 +38,28 @@ export async function createEncounter(input: {
     return parsed.data
   }))
   const profiles = (['a', 'b'] as const).map((key, index) => buildFrozenProfile(input.participants[key].userId, personas[index]))
-  const voiceProfiles = await Promise.all((['a', 'b'] as const).map((key, index) =>
-    loadVoiceProfile(database, input.participants[key].userId, personas[index].style),
-  ))
-  await Promise.all([
-    ...profiles.map(profile => database.collection('user_profiles').updateOne(
+  const accountContextEntries = await Promise.all((['a', 'b'] as const).map(async (key) => [
+    key,
+    await snapshotRequiredAgentContext(input.participants[key].userId, database),
+  ] as const))
+  const accountContexts = Object.fromEntries(accountContextEntries) as Record<PersonKey, AgentContextSnapshot>
+  await Promise.all(profiles.map(profile => database.collection('user_profiles').updateOne(
       { profileVersionId: profile.profileVersionId },
       { $setOnInsert: { ...profile, createdAt: new Date() } },
       { upsert: true },
-    )),
-    ...voiceProfiles.map(profile => database.collection('voice_profiles').updateOne(
-      { voiceProfileVersionId: profile.voiceProfileVersionId },
-      { $setOnInsert: { ...profile, createdAt: new Date() } },
-      { upsert: true },
-    )),
-  ])
+    )))
   const retrievedContext = Object.fromEntries(await Promise.all((['a', 'b'] as const).map(async (key, index) => [key, await retrievePersonaContext(key, personas[index])])))
   // The learned weighting is frozen with the profiles so a running encounter cannot change mid conversation.
   const adaptations = await Promise.all(profiles.map(profile => latestAdaptation(profile.userId)))
   const participants: EncounterParticipant[] = profiles.map((profile, index) => ({
     key: index === 0 ? 'a' : 'b', userId: profile.userId, name: profile.name,
     profileVersionId: profile.profileVersionId,
-    voiceProfileVersionId: voiceProfiles[index].voiceProfileVersionId,
     adaptationVersionId: adaptations[index]?.adaptationVersionId ?? null,
+    agentContextRevision: accountContexts[index === 0 ? 'a' : 'b'].revision,
   }))
   await database.collection<StringIdDocument>('conversation_encounters').insertOne({
     _id: encounterId, status: 'pending_start', scenario: DEFAULT_SCENARIO,
-    turns: input.turns, participants, retrievedContext, temporaryState: { a: null, b: null }, createdAt: new Date(),
+    turns: input.turns, participants, accountContexts, retrievedContext, temporaryState: { a: null, b: null }, createdAt: new Date(),
   })
   return encounterId
 }
@@ -76,9 +71,6 @@ export async function loadEncounter(encounterId: string) {
   const profileDocuments = await database.collection('user_profiles').find({
     profileVersionId: { $in: encounter.participants.map((item: EncounterParticipant) => item.profileVersionId) },
   }).toArray()
-  const voiceProfileDocuments = await database.collection('voice_profiles').find({
-    voiceProfileVersionId: { $in: encounter.participants.map((item: EncounterParticipant) => item.voiceProfileVersionId) },
-  }).toArray()
   const profiles = Object.fromEntries(encounter.participants.map((participant: EncounterParticipant) => {
     const profile = profileDocuments.find(item => item.profileVersionId === participant.profileVersionId)
     if (!profile) throw new Error(`Frozen profile missing for ${participant.userId}`)
@@ -87,20 +79,18 @@ export async function loadEncounter(encounterId: string) {
     void createdAt
     return [participant.key, data as FrozenProfile]
   })) as Record<PersonKey, FrozenProfile>
-  const voiceProfiles = Object.fromEntries(encounter.participants.map((participant: EncounterParticipant) => {
-    const profile = voiceProfileDocuments.find(item => item.voiceProfileVersionId === participant.voiceProfileVersionId)
-    if (!profile) throw new Error(`Frozen voice profile missing for ${participant.userId}`)
-    const { _id, createdAt, ...data } = profile
-    void _id
-    void createdAt
-    return [participant.key, data as VoiceProfile]
-  })) as Record<PersonKey, VoiceProfile>
+  const accountContexts = encounter.accountContexts as Record<PersonKey, AgentContextSnapshot> | undefined
+  for (const key of ['a', 'b'] as const) {
+    const context = accountContexts?.[key]
+    if (!context || !Number.isInteger(context.revision) || context.revision < 0 || typeof context.compiledPrompt !== 'string' || !context.compiledPrompt.trim())
+      throw new Error(`Frozen agent context missing for participant ${key}`)
+  }
   const adaptationEntries = await Promise.all(encounter.participants.map(async (participant: EncounterParticipant) => {
     const adaptation = participant.adaptationVersionId ? await adaptationByVersionId(participant.adaptationVersionId) : null
     return [participant.key, adaptation] as const
   }))
   const adaptations = Object.fromEntries(adaptationEntries) as Record<PersonKey, StoredAdaptation | null>
-  return { database, encounter, profiles, voiceProfiles, adaptations }
+  return { database, encounter, profiles, accountContexts: accountContexts as Record<PersonKey, AgentContextSnapshot>, adaptations }
 }
 
 export async function claimEncounter(encounterId: string, workflowRunId: string) {
@@ -136,34 +126,13 @@ export async function saveReaction(input: {
   return reactionId
 }
 
-export async function saveVoicePrompt(input: {
-  encounterId: string
-  ownerUserId: string
-  voiceProfileVersionId: string
-  output: VoicePromptBuilderOutput
-  model: string
-}) {
-  const database = await getMongoDatabase()
-  const promptVersion = 'voice-prompt-builder-v1'
-  const promptId = `${input.encounterId}:voice:${input.ownerUserId}`
-  await database.collection<StringIdDocument>('agent_voice_prompts').updateOne(
-    { encounterId: input.encounterId, ownerUserId: input.ownerUserId, promptVersion },
-    { $setOnInsert: {
-      _id: promptId, ...input, model: input.model,
-      promptVersion, createdAt: new Date(),
-    } },
-    { upsert: true },
-  )
-  return promptId
-}
-
 export async function saveMessage(input: {
   encounterId: string
   sequence: number
   speakerUserId: string
   speakerKey: PersonKey
   reactionId: string | null
-  voicePromptId: string
+  agentContextRevision: number
   action: string
   text: string
   profileEvidenceIds: string[]
