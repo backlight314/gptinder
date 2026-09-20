@@ -47,9 +47,12 @@ it('loads stored profiles, selects one, and keeps URL import available', async (
   expect(fetchMock).toHaveBeenCalledWith('/api/personas?slot=a', { cache: 'no-store' })
 })
 
-it('uses another account profile without attempting an unauthorized write', async () => {
+it('lets Person One edit and save another stored profile', async () => {
   const readOnlyProfile = { ...storedProfile, owned: false }
-  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ profiles: [readOnlyProfile] }), { status: 200 }))
+  const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    if (init?.method === 'POST') return Promise.resolve(new Response(JSON.stringify({ userId: readOnlyProfile.userId }), { status: 200 }))
+    return Promise.resolve(new Response(JSON.stringify({ profiles: [readOnlyProfile] }), { status: 200 }))
+  })
   vi.stubGlobal('fetch', fetchMock)
 
   render(<AIMatchmaker />)
@@ -57,13 +60,14 @@ it('uses another account profile without attempting an unauthorized write', asyn
   expect(await screen.findByText('Stored Person')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: /stored person.*use this profile/i }))
 
-  expect(screen.getByLabelText('Name')).toBeDisabled()
-  expect(screen.getByRole('button', { name: /use selected profile and continue/i })).toBeEnabled()
-  fireEvent.click(screen.getByRole('button', { name: /use selected profile and continue/i }))
-  expect(fetchMock.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === 'POST')).toBe(false)
+  expect(screen.getByLabelText('Name')).not.toBeDisabled()
+  expect(screen.getByRole('button', { name: /save selected profile and continue/i })).toBeEnabled()
+  fireEvent.click(screen.getByRole('button', { name: /save selected profile and continue/i }))
+  const postCall = fetchMock.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === 'POST')
+  expect(JSON.parse(String((postCall?.[1] as RequestInit).body))).toMatchObject({ userId: readOnlyProfile.userId })
 })
 
-it('allows Person One to author a blank stored profile as a new persona draft', async () => {
+it('allows Person One to author a blank stored profile', async () => {
   const blankProfile = { ...storedProfile, name: 'Blank Contact', bio: '', traits: [], interests: [], style: '', prefilled: false, owned: false }
   const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     if (init?.method === 'POST') return Promise.resolve(new Response(JSON.stringify({ userId: 'usr_new_persona' }), { status: 200 }))
@@ -86,5 +90,5 @@ it('allows Person One to author a blank stored profile as a new persona draft', 
 
   const postCall = fetchMock.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === 'POST')
   expect(postCall).toBeDefined()
-  expect(JSON.parse(String((postCall?.[1] as RequestInit).body))).not.toHaveProperty('userId')
+  expect(JSON.parse(String((postCall?.[1] as RequestInit).body))).toMatchObject({ userId: blankProfile.userId })
 })

@@ -40,13 +40,6 @@ export async function POST(request: Request) {
       )
     }
     const currentUserId = await currentAgentContextUserId()
-    const selectedPublicProfile = body.data.slot === 'b' && body.data.badgeId && body.data.userId
-      ? (await listLabProfiles('b')).find(profile => profile.badgeId === body.data.badgeId && profile.userId === body.data.userId)
-      : undefined
-    if (body.data.userId && body.data.userId !== currentUserId && !selectedPublicProfile) {
-      return Response.json({ error: 'This account is not authorized in the current browser session.' }, { status: 403 })
-    }
-
     const stored = await storePersona(body.data.persona, body.data.slot, body.data.userId)
     const canAccessAccount = stored.userCreated || currentUserId === stored.userId
     const response = Response.json(canAccessAccount ? stored : { ...stored, agentContext: undefined })
