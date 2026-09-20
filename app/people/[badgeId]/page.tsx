@@ -5,6 +5,7 @@ import SiteNav from '@/components/site-nav'
 import ProfileAvatar from '@/components/profile-avatar'
 import { notFound } from 'next/navigation'
 import ProfileAnalyzer from '@/components/profile-analyzer'
+import MessagingConnections from '@/components/messaging-connections'
 import { getPublicProfile, listProfileConnections } from '@/lib/airos-directory-store'
 
 export const dynamic = 'force-dynamic'
@@ -43,6 +44,7 @@ export default async function PersonPage({ params }: Props) {
     <div className="profile-columns">
       <section className="glass-panel profile-section"><h2 className="section-title"><ContactRound size={19} /> Keep in touch</h2><p className="section-intro">The details they shared on their badge.</p>
         <ContactLink label="Email" value={profile.email} href={profile.email ? `mailto:${profile.email}` : undefined} /><ContactLink label="Phone" value={profile.phone} href={profile.phone ? `tel:${profile.phone}` : undefined} /><ContactLink label="LinkedIn" value={profile.linkedin} href={profile.linkedin || undefined} /><ContactLink label="Instagram" value={profile.instagram} href={profile.instagram || undefined} /><ContactLink label="X / Twitter" value={profile.x} href={profile.x || undefined} /><ContactLink label="Discord" value={profile.discord} />
+        <MessagingConnections {...profile.messagingConnections} />
         {!hasContacts && <p className="analysis-empty">No contact links have been shared on this badge yet.</p>}
       </section>
       <section className="glass-panel profile-section"><h2 className="section-title"><Sparkles size={19} /> A little more about {profile.name.split(' ')[0]}</h2><p className="section-intro">Explore shared interests and find a thoughtful way to start your next conversation.</p><div className="mt-5"><ProfileAnalyzer badgeId={profile.badgeId} /></div>

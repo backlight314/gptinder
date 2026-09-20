@@ -122,6 +122,16 @@ button, a { transition: background .2s, color .2s, box-shadow .2s, transform .2s
 .contact-arrow { width: 22px; height: 22px; flex: 0 0 22px; display: inline-grid; place-items: center; border: 1px solid #eadfe4; border-radius: 50%; color: #b27889; background: #fff8fa; transition: transform .2s ease, background .2s ease, color .2s ease; }
 .contact-row a:hover { color: #d84355; }
 .contact-row a:hover .contact-arrow { color: #fff; background: #d84355; transform: translate(2px, -2px) rotate(4deg); }
+.messaging-connections { display: grid; gap: 9px; margin-top: 20px; }
+.messaging-connection { min-height: 62px; display: flex; align-items: center; gap: 11px; border: 1px solid; border-radius: 13px; padding: 11px 13px; }
+.messaging-connection .messaging-icon { width: 34px; height: 34px; flex: 0 0 34px; display: grid; place-items: center; border-radius: 10px; }
+.messaging-connection strong { display: block; color: #3e353a; font-size: 12px; }
+.messaging-connection p { margin-top: 2px; font-size: 10px; }
+.messaging-check { margin-left: auto; }
+.messaging-whatsapp { border-color: #bfe5cc; background: #f3fbf5; color: #29874d; }
+.messaging-whatsapp .messaging-icon { background: #dff4e5; }
+.messaging-discord { border-color: #cbd6f6; background: #f5f7ff; color: #526fc5; }
+.messaging-discord .messaging-icon { background: #e4e9fb; }
 .analysis-body { margin-top: 22px; border-top: 1px solid #eee4e9; padding-top: 22px; }
 .analysis-body h3 { font-size: 20px; font-weight: 600; letter-spacing: -.5px; }
 .analysis-body > p { color: #85707c; font-size: 13px; line-height: 1.9; margin-top: 12px; }
