@@ -86,7 +86,7 @@ def persona_summary(persona: dict) -> str:
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
-log = logging.getLogger("gptinder.bot")
+log = logging.getLogger("discord.gptinder")  # under "discord" so bot.run() gives it a handler
 
 
 @bot.event
