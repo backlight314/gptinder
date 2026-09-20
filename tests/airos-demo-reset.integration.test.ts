@@ -76,7 +76,7 @@ describe('AIROS profile photo and demo reset', () => {
     expect(Buffer.from(await response.arrayBuffer())).toEqual(png)
   })
 
-  it('clears badge data and badge-linked social data while preserving unrelated social records', async () => {
+  it('clears badge data while preserving cached social profile photos', async () => {
     await database.collection('airos_connections').insertOne({ badgeIds: [badgeId, 'friend'] })
     await database.collection('airos_profile_observations').insertOne({ badgeId })
     await database.collection('airos_imports').insertOne({ ownerBadgeId: badgeId })
@@ -93,7 +93,7 @@ describe('AIROS profile photo and demo reset', () => {
     for (const collection of ['airos_profiles', 'airos_connections', 'airos_profile_observations', 'airos_imports', 'airos_profile_analyses', 'airos_rate_limits']) {
       expect(await database.collection(collection).countDocuments()).toBe(0)
     }
-    expect(await database.collection('linkedin_profiles').countDocuments({ userId })).toBe(0)
+    expect(await database.collection('linkedin_profiles').countDocuments({ userId })).toBe(1)
     expect(await database.collection('social_posts').countDocuments({ userId: 'unrelated' })).toBe(1)
     expect(await database.collection('social_comments').countDocuments({ userId: 'unrelated' })).toBe(1)
     expect(await database.collection<{ _id: string }>('users').countDocuments({ _id: 'unrelated' })).toBe(1)

@@ -9,6 +9,7 @@ import type {
   NormalizedSocialPost,
   NormalizedSocialProfile,
   ProfileImageAsset,
+  SocialProfilePhoto,
   SocialImportPayload,
 } from '@/lib/social-types'
 
@@ -307,6 +308,53 @@ async function downloadImage(url: string | null): Promise<ProfileImageAsset | nu
   } catch {
     return null
   }
+}
+
+export async function extractProfilePhotoWithApify(
+  platform: 'linkedin' | 'instagram' | 'x',
+  requestedHandle: string,
+  sourceUrl: string,
+): Promise<SocialProfilePhoto> {
+  let rawProfile: JsonRecord
+  let avatarUrl: string | null
+
+  if (platform === 'linkedin') {
+    const result = await runActorWithItems(PROFILE_ACTOR, {
+      profileScraperMode: 'Profile details no email ($4 per 1k)',
+      queries: [sourceUrl],
+    })
+    rawProfile = result.items[0] || {}
+    avatarUrl = imageUrl(rawProfile.profilePicture) || imageUrl(rawProfile.photo)
+  } else if (platform === 'instagram') {
+    const result = await runActorWithItems(INSTAGRAM_PROFILE_ACTOR, {
+      usernames: [requestedHandle],
+      includeAboutSection: false,
+    })
+    rawProfile = result.items[0] || {}
+    if (rawProfile.error) throw new SocialImportError(`Instagram import failed: ${String(rawProfile.error)}`, 422)
+    avatarUrl = firstText(rawProfile.profilePicUrlHD, rawProfile.profilePicUrl, rawProfile.profilePicture)
+  } else {
+    const result = await runActorWithItems(X_ACTOR, {
+      usernames: [requestedHandle],
+      tweetsPerUser: 1,
+      includeReplies: false,
+      includeRetweets: false,
+      includeProfileOnlyItems: true,
+      maxIPRotations: 5,
+    })
+    const firstItem = result.items.find((item) => Object.keys(record(item.author)).length > 0)
+    rawProfile = record(firstItem?.author)
+    avatarUrl = text(rawProfile.profile_image_url)
+  }
+
+  if (!Object.keys(rawProfile).length) {
+    throw new SocialImportError(`Apify returned no public ${platform} profile data for that handle.`, 422)
+  }
+  const profileImage = await downloadImage(avatarUrl)
+  if (!avatarUrl || !profileImage) {
+    throw new SocialImportError(`No usable public ${platform} profile photo was available.`, 422)
+  }
+  return { platform, handle: requestedHandle, sourceUrl, avatarUrl, profileImage, profileSourceData: rawProfile }
 }
 
 export async function extractLinkedInWithApify(

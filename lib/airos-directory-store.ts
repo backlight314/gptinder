@@ -44,6 +44,8 @@ export type AirosProfileDocument = {
   lastImportedAt: Date
   createdAt: Date
   updatedAt: Date
+  photoRefreshAttemptedAt?: Date
+  photoRefreshError?: string | null
 }
 
 export type AirosAnalysisDocument = {

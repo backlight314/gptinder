@@ -24,6 +24,7 @@ type SerialNavigator = Navigator & {
 }
 
 type PreviewResponse = { ownerBadgeId: string; records: PreviewRecord[]; error?: string }
+type PhotoRefreshResponse = { found: number; existing: number; unavailable: number; skipped: number }
 
 const COMMAND_TIMEOUT_MS = 10_000
 const MAX_COMMAND_OUTPUT = 128 * 1024
@@ -212,8 +213,21 @@ export default function BadgeImporter() {
       }))
       setResult(summary)
       setRecords(summary.profiles)
+      setMessage('Profiles imported. Looking for public profile photos…')
+      let photoMessage = ''
+      try {
+        const photos = await responseJson<PhotoRefreshResponse>(await fetch('/api/airos/imports/photos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ badgeIds: summary.profiles.map((profile) => profile.badgeId) }),
+        }))
+        const available = photos.found + photos.existing
+        photoMessage = available ? ` ${available} profile photo${available === 1 ? '' : 's'} available.` : ''
+      } catch {
+        photoMessage = ' Profile photos can still be added with Analyze profile.'
+      }
       setPhase('done')
-      setMessage('Import complete. The badge was read only; no badge files or settings were changed.')
+      setMessage(`Import complete.${photoMessage} The badge was read only; no badge files or settings were changed.`)
     } catch (error) {
       setPhase('ready')
       setMessage(error instanceof Error ? error.message : 'Upload failed.')
