@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { storePersona } from '@/lib/persona-store'
+import { listLabProfiles, storePersona } from '@/lib/persona-store'
 import { manualPersonaSchema } from '@/lib/psychology/schemas'
 import { agentContextAccessCookie, currentAgentContextUserId } from '@/lib/agent-contexts/access'
 
@@ -10,6 +10,22 @@ const requestSchema = z.object({
   slot: z.enum(['a', 'b']),
   persona: manualPersonaSchema,
 })
+
+export async function GET(request: Request) {
+  const requestedSlot = new URL(request.url).searchParams.get('slot')
+  if (requestedSlot && requestedSlot !== 'a' && requestedSlot !== 'b') {
+    return Response.json({ error: 'Slot must be a or b.' }, { status: 400 })
+  }
+  try {
+    return Response.json({ profiles: await listLabProfiles(requestedSlot as 'a' | 'b' | undefined) })
+  } catch (error) {
+    console.error('Persona list failed', error)
+    return Response.json(
+      { error: 'The stored profiles could not be loaded. Check the server configuration and try again.' },
+      { status: 500 },
+    )
+  }
+}
 
 export async function POST(request: Request) {
   try {

@@ -29,9 +29,13 @@ export async function createEncounter(input: {
   const database = await getMongoDatabase()
   const encounterId = `enc_${randomUUID()}`
   const personas = await Promise.all((['a', 'b'] as const).map(async key => {
-    const document = await database.collection('personas').findOne(
+    const collection = database.collection('personas')
+    const document = await collection.findOne(
       { userId: input.participants[key].userId, slot: key },
       { projection: { _id: 0, name: 1, bio: 1, traits: 1, interests: 1, style: 1, values: 1, lifeGoals: 1, relationshipPreferences: 1 } },
+    ) || await collection.findOne(
+      { userId: input.participants[key].userId },
+      { sort: { updatedAt: -1 }, projection: { _id: 0, name: 1, bio: 1, traits: 1, interests: 1, style: 1, values: 1, lifeGoals: 1, relationshipPreferences: 1 } },
     )
     const parsed = manualPersonaSchema.safeParse(document)
     if (!parsed.success) throw new Error(`Approved persona missing for participant ${key}`)

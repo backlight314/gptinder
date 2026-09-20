@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto'
 import { ObjectId } from 'mongodb'
 import { getMongoDatabase } from '@/lib/mongodb'
 import { agentContextView, ensureMinimalAgentContext, initializeNewAgentContext } from '@/lib/agent-contexts/store'
+import { refreshPersonaPrefill } from '@/lib/persona-prefill'
 import type { SocialImportPayload, SocialPlatform, SocialProfilePhoto } from '@/lib/social-types'
 
 const PROFILE_COLLECTIONS: Record<SocialPlatform, string> = {
@@ -251,6 +252,13 @@ export async function storeSocialImport(payload: SocialImportPayload, requestedU
   await sections.deleteMany({
     profileId,
     externalId: { $nin: importedSections.map((section) => section.externalId) },
+  })
+
+  await refreshPersonaPrefill({
+    userId,
+    name: payload.profile.name,
+    profileTexts: [payload.profile.bio, payload.profile.headline].filter((value): value is string => Boolean(value)),
+    posts: importedPosts.map(post => post.text),
   })
 
   if (userWrite.upsertedCount === 1) agentContext = await initializeNewAgentContext(userId, database)

@@ -46,6 +46,10 @@ export async function getMongoDatabase(): Promise<Db> {
         { userId: 1 },
         { unique: true, name: 'agent_context_user_unique' },
       ),
+      database.collection('persona_prefills').createIndex(
+        { userId: 1 },
+        { unique: true, name: 'persona_prefill_user_unique' },
+      ),
       ...(['linkedin_profiles', 'instagram_profiles', 'x_profiles'] as const).map((name) =>
         database.collection(name).createIndex(
           { userId: 1 },
