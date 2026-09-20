@@ -55,6 +55,15 @@ export type ProfileImageAsset = {
   bytes: Uint8Array
 }
 
+export type SocialProfilePhoto = {
+  platform: SocialPlatform
+  handle: string
+  sourceUrl: string
+  avatarUrl: string
+  profileImage: ProfileImageAsset
+  profileSourceData: Record<string, unknown>
+}
+
 export type SocialImportPayload = {
   provider?: 'apify'
   importMetadata?: Record<string, unknown>
