@@ -84,7 +84,7 @@ export async function storeSocialImport(payload: SocialImportPayload, requestedU
       : { userId }
   const profileResult = await profileCollection.findOneAndUpdate(
     profileFilter,
-    { $set: { ...rawProfile, userId, syncedAt: now } },
+    { $set: { ...rawProfile, avatarUrl: payload.profile.avatarUrl, userId, syncedAt: now } },
     { upsert: true, returnDocument: 'after' },
   )
   if (!profileResult) throw new Error('MongoDB did not return the stored platform profile')

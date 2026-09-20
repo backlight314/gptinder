@@ -1,4 +1,8 @@
 import Link from 'next/link'
+import { ArrowUpRight, Search, Usb, Users, ArrowRight } from 'lucide-react'
+import InteractiveHeart from '@/components/interactive-heart'
+import SiteNav from '@/components/site-nav'
+import ProfileAvatar from '@/components/profile-avatar'
 import { listPublicProfiles } from '@/lib/airos-directory-store'
 
 export const dynamic = 'force-dynamic'
@@ -25,37 +29,32 @@ export default async function DirectoryPage({ searchParams }: Props) {
   const pages = Math.max(1, Math.ceil(directory.total / directory.pageSize))
 
   return (
-    <main className="min-h-screen">
-      <header className="border-b bg-card/80 backdrop-blur">
-        <nav className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 sm:px-8">
-          <Link href="/" className="text-xl font-black tracking-tight">Hack the Heart</Link>
-          <div className="flex items-center gap-5 text-sm"><Link href="/lab" className="text-muted-foreground hover:text-foreground">AI Lab</Link><Link href="/import" className="rounded-full bg-primary px-5 py-2.5 font-bold text-primary-foreground">Import badge</Link></div>
-        </nav>
-      </header>
-      <section className="mx-auto max-w-7xl px-5 pb-8 pt-16 sm:px-8 sm:pt-24">
-        <p className="text-sm font-bold uppercase tracking-[0.2em] text-primary">Universal badge directory</p>
-        <div className="mt-4 grid gap-8 lg:grid-cols-[1fr_auto] lg:items-end">
-          <div><h1 className="max-w-4xl text-5xl font-black tracking-[-0.04em] sm:text-7xl">People you met, in one shared place.</h1><p className="mt-6 max-w-2xl text-lg leading-8 text-muted-foreground">Read official Connect contacts from any compatible badge, preview them, then add missing people to the shared Hack the Heart directory.</p></div>
-          <div className="rounded-3xl border bg-card p-6"><p className="text-4xl font-black">{directory.total.toLocaleString()}</p><p className="mt-1 text-sm text-muted-foreground">badge-imported profiles</p></div>
-        </div>
-        <form action="/" className="mt-12 flex max-w-2xl gap-3">
-          <input name="q" defaultValue={query} maxLength={100} placeholder="Search by name or badge ID" className="min-w-0 flex-1 rounded-full border bg-card px-5 py-3 outline-none focus:ring-2 focus:ring-primary" />
-          <button className="rounded-full border bg-card px-6 py-3 font-bold">Search</button>
-        </form>
+    <main className="directory-page">
+      <SiteNav />
+      <section className="directory-hero shell">
+        <h1>A small hello.<br />A <span>real connection.</span></h1>
+        <p className="hero-description">Good conversations deserve a next chapter. Bring the people you meet at Hack the North into one shared place.</p>
+        <div className="hero-actions"><Link href="/import" className="primary-button">Bring your badge <ArrowUpRight size={18} /></Link><a href="#people" className="text-button">Explore the directory <ArrowRight size={16} /></a></div>
+        <div className="hero-note"><InteractiveHeart label="Send love for real-world connections" /> Built around real-world connections.</div>
+        <div className="hero-orbit"><div className="orbit-ring" aria-hidden="true" /><div className="orbit-ring inner" aria-hidden="true" /><InteractiveHeart large /><span className="orbit-label orbit-label-one" aria-hidden="true"><Users size={16} /> A familiar face</span><span className="orbit-label orbit-label-two" aria-hidden="true"><span className="live-dot" /> Stay connected</span><span className="orbit-star" aria-hidden="true">✳</span></div>
       </section>
-      <section className="mx-auto max-w-7xl px-5 pb-20 sm:px-8">
-        {!directory.configured && <div className="rounded-3xl border border-dashed p-10 text-center"><h2 className="text-xl font-bold">Directory setup is waiting for MongoDB.</h2><p className="mt-2 text-muted-foreground">Configure the server database, then import a badge to create the first profiles.</p></div>}
-        {error && <p className="rounded-2xl bg-destructive/10 p-4 text-destructive">{error}</p>}
-        {directory.configured && !error && directory.profiles.length === 0 && <div className="rounded-3xl border border-dashed p-10 text-center"><h2 className="text-xl font-bold">{query ? 'No matching profiles.' : 'No profiles yet.'}</h2><p className="mt-2 text-muted-foreground">{query ? 'Try a different name or badge ID.' : 'Connect a badge to preview and import its official contacts.'}</p><Link href="/import" className="mt-6 inline-block rounded-full bg-primary px-6 py-3 font-bold text-primary-foreground">Import a badge</Link></div>}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {directory.profiles.map((profile) => <Link key={profile.badgeId} href={`/people/${profile.badgeId}`} className="group rounded-3xl border bg-card p-6 transition hover:-translate-y-1 hover:shadow-lg">
-            <div className="flex items-start justify-between gap-3"><div><h2 className="text-xl font-bold group-hover:text-primary">{profile.name}</h2><p className="mt-1 font-mono text-xs text-muted-foreground">{profile.badgeId}</p></div><span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">badge imported</span></div>
-            <p className="mt-6 text-sm text-muted-foreground">{profile.role || 'Hack the North participant'}</p>
-            <div className="mt-6 flex items-center justify-between text-xs text-muted-foreground"><span>{socialCount(profile)} social link{socialCount(profile) === 1 ? '' : 's'}</span><span>Updated {profile.lastImportedAt instanceof Date ? profile.lastImportedAt.toLocaleDateString('en-CA') : 'recently'}</span></div>
+      <section id="people" className="shell directory-content">
+        <div className="directory-toolbar"><div><p className="eyebrow">YOUR NEXT CONVERSATION</p><h2>The people directory <span className="count-pill">{directory.total.toLocaleString()}</span></h2></div><form action="/" className="directory-search"><Search size={18} aria-hidden="true" /><input aria-label="Search by name or badge ID" name="q" defaultValue={query} maxLength={100} placeholder="Find someone you met…" /><button type="submit">Search</button></form></div>
+        {query && <p className="search-summary">Results for “{query}” <Link href="/">Clear search</Link></p>}
+        {!directory.configured && <div className="glass-panel empty-state"><h2>The directory is getting ready.</h2><p>Connect the database to start adding people.</p></div>}
+        {error && <p role="alert" className="glass-panel p-5 text-destructive">{error}</p>}
+        {directory.configured && !error && directory.profiles.length === 0 && <div className="glass-panel empty-state"><div className="empty-icon">{query ? <Search size={28} /> : <Usb size={28} />}</div><p className="eyebrow">{query ? 'KEEP LOOKING' : 'EVERY CONNECTION STARTS SOMEWHERE'}</p><h2>{query ? 'No one here by that name.' : 'Your first hello belongs here.'}</h2><p>{query ? 'Try another name or badge ID to find your person.' : 'Connect your badge, preview your contacts, and give those conversations a place to grow.'}</p><Link href={query ? '/' : '/import'} className="primary-button">{query ? 'View everyone' : 'Import your first badge'} <ArrowUpRight size={16} /></Link></div>}
+        <div className="people-grid">
+          {directory.profiles.map(profile => <Link key={profile.badgeId} href={`/people/${profile.badgeId}`} className="person-card glass-panel">
+            <div className="person-card-top"><ProfileAvatar name={profile.name} /><span className="card-arrow"><ArrowUpRight size={18} /></span></div>
+            <h3>{profile.name}</h3><p className="person-role">{profile.role && !/^\d+$/.test(profile.role) ? profile.role : 'Hack the North participant'}</p>
+            <p className="badge-id">{profile.badgeId}</p>
+            <div className="person-card-footer"><span><span className="live-dot" /> Badge imported</span><span>{socialCount(profile)} social link{socialCount(profile) === 1 ? '' : 's'}</span></div>
           </Link>)}
         </div>
-        {pages > 1 && <nav aria-label="Directory pages" className="mt-10 flex items-center justify-center gap-4 text-sm"><Link aria-disabled={directory.page <= 1} className={directory.page <= 1 ? 'pointer-events-none opacity-40' : 'font-bold'} href={`/?${new URLSearchParams({ ...(query ? { q: query } : {}), page: String(directory.page - 1) })}`}>← Previous</Link><span>Page {directory.page} of {pages}</span><Link aria-disabled={directory.page >= pages} className={directory.page >= pages ? 'pointer-events-none opacity-40' : 'font-bold'} href={`/?${new URLSearchParams({ ...(query ? { q: query } : {}), page: String(directory.page + 1) })}`}>Next →</Link></nav>}
+        {pages > 1 && <nav aria-label="Directory pages" className="pagination"><Link aria-disabled={directory.page <= 1} className={directory.page <= 1 ? 'pointer-events-none opacity-40' : ''} href={`/?${new URLSearchParams({ ...(query ? { q: query } : {}), page: String(directory.page - 1) })}`}>← Previous</Link><span>{directory.page} / {pages}</span><Link aria-disabled={directory.page >= pages} className={directory.page >= pages ? 'pointer-events-none opacity-40' : ''} href={`/?${new URLSearchParams({ ...(query ? { q: query } : {}), page: String(directory.page + 1) })}`}>Next →</Link></nav>}
       </section>
+      <footer className="site-footer shell"><span>hack the heart.</span><p>Less scrolling. More connecting.</p><InteractiveHeart label="Send love from the footer" /></footer>
     </main>
   )
 }

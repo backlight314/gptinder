@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
+import SiteNav from '@/components/site-nav'
 import {
   AIROS_MAX_CONTACTS,
   importBatchFromSerial,
@@ -212,11 +213,7 @@ export default function BadgeImporter() {
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-6xl px-5 py-10 sm:px-8">
-      <nav className="mb-12 flex items-center justify-between">
-        <Link href="/" className="text-xl font-black tracking-tight">Hack the Heart</Link>
-        <Link href="/lab" className="text-sm text-muted-foreground hover:text-foreground">AI Lab</Link>
-      </nav>
+    <><SiteNav /><main className="mx-auto min-h-screen max-w-6xl px-5 py-12 sm:px-8">
       <section className="max-w-3xl">
         <p className="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-primary">Official Connect importer</p>
         <h1 className="text-4xl font-black tracking-tight sm:text-6xl">Bring your badge contacts into Hack the Heart.</h1>
@@ -253,6 +250,6 @@ export default function BadgeImporter() {
         {result && <p className="mt-6 rounded-xl bg-emerald-500/10 p-4 text-sm text-emerald-800">Added {result.newProfiles}, filled {result.updatedProfiles}, kept {result.existingProfiles}, and recorded {result.connections} connections.</p>}
       </section>
       <aside className="mt-6 rounded-2xl border border-dashed p-5 text-sm leading-6 text-muted-foreground"><strong className="text-foreground">Read-only badge access.</strong> Hack the Heart only sends the three documented <code>cat</code>/<code>ls</code> command shapes. It does not flash, reboot, configure, or write to the badge. Imported profiles—including email and phone—are public and marked badge-imported.</aside>
-    </main>
+    </main></>
   )
 }
