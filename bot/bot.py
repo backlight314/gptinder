@@ -11,8 +11,6 @@ load_dotenv()
 BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:8000").rstrip("/")
 INGEST_TOKEN = os.environ.get("INGEST_TOKEN", "")
 HISTORY_LIMIT = int(os.environ.get("HISTORY_LIMIT", "500"))
-# !personaall skips people with fewer messages than this in the scan; a persona from a handful is noise.
-MIN_PERSONA_MESSAGES = int(os.environ.get("MIN_PERSONA_MESSAGES", "10"))
 BUILD_CONCURRENCY = 2  # each build is four LLM calls, so don't fan out across a whole channel at once
 
 
@@ -149,8 +147,7 @@ async def persona_all(ctx: commands.Context):
         if not by_author:
             await ctx.reply(f"I didn't find any messages from people in the last {HISTORY_LIMIT} here.")
             return
-        eligible = [a for a in sent if len(by_author[a]) >= MIN_PERSONA_MESSAGES]
-        skipped = len(sent) - len(eligible)
+        eligible = sent
         gate = asyncio.Semaphore(BUILD_CONCURRENCY)
 
         async def build(author_id: int) -> bool:
@@ -168,8 +165,6 @@ async def persona_all(ctx: commands.Context):
     parts = [f"Built {built} personas, each saved under its own id."]
     if built < len(eligible):
         parts.append(f"{len(eligible) - built} failed to build.")
-    if skipped:
-        parts.append(f"Skipped {skipped} with fewer than {MIN_PERSONA_MESSAGES} messages.")
     if failed:
         parts.append(f"{failed} exports failed.")
     await ctx.reply(" ".join(parts))
