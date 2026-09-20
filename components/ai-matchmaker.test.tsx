@@ -92,3 +92,30 @@ it('allows Person One to author a blank stored profile', async () => {
   expect(postCall).toBeDefined()
   expect(JSON.parse(String((postCall?.[1] as RequestInit).body))).toMatchObject({ userId: blankProfile.userId })
 })
+
+it('lets Person Two edit and save a selected stored profile', async () => {
+  const personTwoProfile = { ...storedProfile, name: 'Person Two Profile', userId: 'usr_person_two', owned: false }
+  const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    if (init?.method === 'POST') return Promise.resolve(new Response(JSON.stringify({ userId: storedProfile.userId }), { status: 200 }))
+    const url = String(input)
+    return Promise.resolve(new Response(JSON.stringify({ profiles: url.includes('slot=b') ? [personTwoProfile] : [storedProfile] }), { status: 200 }))
+  })
+  vi.stubGlobal('fetch', fetchMock)
+
+  render(<AIMatchmaker />)
+  fireEvent.click(screen.getByRole('button', { name: /create the first profile/i }))
+  expect(await screen.findByText('Stored Person')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: /stored person.*use this profile/i }))
+  fireEvent.click(screen.getByRole('button', { name: /save selected profile and continue/i }))
+
+  expect(await screen.findByText(/Person two from your stored profiles/i)).toBeInTheDocument()
+  expect(await screen.findByText('Person Two Profile')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: /person two profile.*use this profile/i }))
+  expect(screen.getByLabelText('Name')).not.toBeDisabled()
+  expect(screen.getByRole('button', { name: /save selected profile and continue/i })).toBeEnabled()
+  fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Edited Person Two' } })
+  fireEvent.click(screen.getByRole('button', { name: /save selected profile and continue/i }))
+
+  const postCalls = fetchMock.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === 'POST')
+  expect(JSON.parse(String((postCalls.at(-1)?.[1] as RequestInit).body))).toMatchObject({ slot: 'b', userId: personTwoProfile.userId })
+})
