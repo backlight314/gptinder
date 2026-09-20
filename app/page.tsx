@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { ArrowUpRight, Search, Usb, Users, ArrowRight } from 'lucide-react'
+import { ArrowLeft, ArrowUpRight, Search, Usb, Users, ArrowRight } from 'lucide-react'
 import InteractiveHeart from '@/components/interactive-heart'
 import SiteNav from '@/components/site-nav'
 import ProfileAvatar from '@/components/profile-avatar'
@@ -53,7 +53,11 @@ export default async function DirectoryPage({ searchParams }: Props) {
             <div className="person-card-footer"><span><span className="live-dot" /> Badge imported</span><span>{socialCount(profile)} social link{socialCount(profile) === 1 ? '' : 's'}</span></div>
           </Link>)}
         </div>
-        {pages > 1 && <nav aria-label="Directory pages" className="pagination"><Link aria-disabled={directory.page <= 1} className={directory.page <= 1 ? 'pointer-events-none opacity-40' : ''} href={`/?${new URLSearchParams({ ...(query ? { q: query } : {}), page: String(directory.page - 1) })}`}>← Previous</Link><span>{directory.page} / {pages}</span><Link aria-disabled={directory.page >= pages} className={directory.page >= pages ? 'pointer-events-none opacity-40' : ''} href={`/?${new URLSearchParams({ ...(query ? { q: query } : {}), page: String(directory.page + 1) })}`}>Next →</Link></nav>}
+        {pages > 1 && <nav aria-label="Directory pages" className="pagination">
+          <Link aria-disabled={directory.page <= 1} tabIndex={directory.page <= 1 ? -1 : undefined} className={`pagination-link pagination-previous${directory.page <= 1 ? ' is-disabled' : ''}`} href={`/?${new URLSearchParams({ ...(query ? { q: query } : {}), page: String(directory.page - 1) })}`}><span className="pagination-arrow"><ArrowLeft size={16} strokeWidth={2} /></span><span>Previous</span></Link>
+          <span className="pagination-count" aria-label={`Page ${directory.page} of ${pages}`}><strong>{directory.page}</strong><span>of</span><strong>{pages}</strong></span>
+          <Link aria-disabled={directory.page >= pages} tabIndex={directory.page >= pages ? -1 : undefined} className={`pagination-link pagination-next${directory.page >= pages ? ' is-disabled' : ''}`} href={`/?${new URLSearchParams({ ...(query ? { q: query } : {}), page: String(directory.page + 1) })}`}><span>Next</span><span className="pagination-arrow"><ArrowRight size={16} strokeWidth={2} /></span></Link>
+        </nav>}
       </section>
       <footer className="site-footer shell"><span>hack the heart.</span><p>Less scrolling. More connecting.</p><div className="footer-actions"><DemoReset /><InteractiveHeart label="Send love from the footer" /></div></footer>
     </main>
