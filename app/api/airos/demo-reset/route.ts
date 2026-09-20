@@ -6,7 +6,7 @@ import { resetAirosDemoData } from '@/lib/airos-demo-reset'
 export const runtime = 'nodejs'
 
 const resetSchema = z.strictObject({
-  confirmation: z.literal('RESET'),
+  confirm: z.literal(true),
 })
 
 export async function POST(request: Request) {
