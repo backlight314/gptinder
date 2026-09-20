@@ -133,3 +133,17 @@ class WhatsAppIngestResponse(BaseModel):
     date_order_guessed: bool
     truncated_messages: int  # over-long messages shortened to MAX_MESSAGE_CHARS
     dropped_oldest: int  # own messages beyond MAX_MESSAGES_PER_REQUEST (the oldest are dropped)
+
+
+class PersonaBuildRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+
+
+class PersonaBuildResponse(BaseModel):
+    user_id: str
+    name: str
+    communication: CommunicationProfile
+    preferences: PreferencesProfile
+    emotions: EmotionsProfile
+    decisions: DecisionsProfile
+    mongo_configured: bool  # False means the persona was only written to data/processed/
