@@ -237,3 +237,37 @@ def test_score_endpoint_drops_reactions_from_a_full_date_transcript(monkeypatch)
     assert response.status_code == 200
     assert [m.text for m in seen["transcript"]] == ["Hey!", "Hi!"]
     assert all("reaction" not in m.model_dump() for m in seen["transcript"])
+
+
+def _built_persona():
+    p = make_persona("Maya").model_dump()
+    p["user_id"] = "42"
+    return p
+
+
+def test_build_user_persona_endpoint(monkeypatch):
+    async def fake_build(user_id, name):
+        assert (user_id, name) == ("42", "Maya")
+        return _built_persona()
+
+    monkeypatch.setattr(main.persona_extract, "build_persona", fake_build)
+    monkeypatch.setattr(main.mongo_store, "is_configured", lambda: True)
+    monkeypatch.delenv("INGEST_TOKEN", raising=False)
+
+    response = client.post("/personas/42/build", json={"name": "Maya"})
+
+    assert response.status_code == 200
+    assert response.json()["user_id"] == "42"
+    assert response.json()["mongo_configured"] is True
+
+
+def test_build_user_persona_requires_token_and_maps_errors(monkeypatch):
+    monkeypatch.setenv("INGEST_TOKEN", "secret")
+    assert client.post("/personas/42/build", json={"name": "Maya"}).status_code == 401
+
+    async def missing(user_id, name):
+        raise FileNotFoundError("No raw data found")
+
+    monkeypatch.setattr(main.persona_extract, "build_persona", missing)
+    headers = {"X-Ingest-Token": "secret"}
+    assert client.post("/personas/42/build", json={"name": "Maya"}, headers=headers).status_code == 404
