@@ -52,7 +52,7 @@ type StoredProfile = Persona & {
   avatarUrl: string | null
   source: 'badge_import' | 'persona'
   prefilled: boolean
-  owned: boolean
+  owned?: boolean
 }
 type AIMatchmakerProps = { initialProfile?: StoredProfile }
 type PersonaListResponse = { profiles?: StoredProfile[]; error?: string }
@@ -272,7 +272,7 @@ function Profile({ user, initial, initialUserId, next, onUserId, back, selectedP
         </div>
         <div className="grid items-start gap-6 lg:grid-cols-2">
           <section className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-7">
-              <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[.18em] text-primary">Choose a person</p><h2 className="mt-2 text-xl font-semibold">{user === 'a' ? 'Person one' : 'Person two'} from your stored profiles</h2><p className="mt-1 text-xs text-muted-foreground">{user === 'a' ? 'Use your owned profile for editing, or review another stored profile without changing it.' : 'Choose a stored person to review their prefilled public profile.'}</p></div>{canCreate && <Button variant={mode === 'new' ? 'primary' : 'secondary'} onClick={startNewProfile}><Link2 size={16} /> Import a new profile</Button>}</div>
+              <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[.18em] text-primary">Choose a person</p><h2 className="mt-2 text-xl font-semibold">{user === 'a' ? 'Person one' : 'Person two'} from your stored profiles</h2><p className="mt-1 text-xs text-muted-foreground">{user === 'a' ? 'Select any stored profile and edit its details, or import a new profile.' : 'Choose a stored person to review their prefilled public profile.'}</p></div>{canCreate && <Button variant={mode === 'new' ? 'primary' : 'secondary'} onClick={startNewProfile}><Link2 size={16} /> Import a new profile</Button>}</div>
             {loadingStored && <p className="mt-5 text-sm text-muted-foreground">Loading stored profiles…</p>}
             {storedError && <p role="alert" className="mt-5 rounded-xl bg-destructive/10 p-3 text-xs text-destructive">{storedError}</p>}
             {!loadingStored && !storedError && storedProfiles.length === 0 && <p className="mt-5 rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">No stored profiles yet. Import a new profile to get started.</p>}
