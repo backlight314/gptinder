@@ -81,6 +81,7 @@ function nested(source: JsonRecord, ...path: string[]): unknown {
 }
 
 function imageUrl(value: unknown): string | null {
+  if (typeof value === 'string' && value.trim()) return value.trim()
   const image = record(value)
   const direct = firstText(image.url, image.pictureUrl)
   if (direct) return direct
