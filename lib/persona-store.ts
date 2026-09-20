@@ -2,6 +2,7 @@ import 'server-only'
 
 import { createHash } from 'node:crypto'
 import { getMongoDatabase } from '@/lib/mongodb'
+import type { ManualPersona as PsychologyPersona } from '@/lib/psychology/schemas'
 
 export type PersonaSlot = 'a' | 'b'
 
@@ -33,7 +34,7 @@ function personalizedUserId(name: string, slot: PersonaSlot) {
 }
 
 export async function storePersona(
-  persona: ManualPersona,
+  persona: PsychologyPersona,
   slot: PersonaSlot,
   requestedUserId?: string,
 ) {

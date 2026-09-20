@@ -1,18 +1,13 @@
 import { z } from 'zod'
 import { storePersona } from '@/lib/persona-store'
+import { manualPersonaSchema } from '@/lib/psychology/schemas'
 
 export const runtime = 'nodejs'
 
 const requestSchema = z.object({
   userId: z.string().trim().regex(/^usr_[a-z0-9_]{3,64}$/).optional(),
   slot: z.enum(['a', 'b']),
-  persona: z.object({
-    name: z.string().trim().min(1).max(80),
-    bio: z.string().trim().min(1).max(600),
-    traits: z.array(z.string().trim().min(1).max(80)).min(1).max(12),
-    interests: z.array(z.string().trim().min(1).max(80)).min(1).max(12),
-    style: z.string().trim().min(1).max(400),
-  }),
+  persona: manualPersonaSchema,
 })
 
 export async function POST(request: Request) {
@@ -20,7 +15,7 @@ export async function POST(request: Request) {
     const body = requestSchema.safeParse(await request.json())
     if (!body.success) {
       return Response.json(
-        { error: 'Complete the name, bio, traits, interests, and conversation style before saving.' },
+        { error: 'Complete the profile, values, goals, and relationship preferences before saving.' },
         { status: 400 },
       )
     }

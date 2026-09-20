@@ -1,0 +1,149 @@
+import 'server-only'
+
+import { agentModel } from '@/lib/agents/models'
+import { calculateCompatibility } from '@/lib/psychology/compatibility'
+import { validateProfileEvidence } from '@/lib/psychology/profile'
+import type { PersonKey, SocialInterpretation } from '@/lib/psychology/schemas'
+import { buildVoicePrompt, interpretMessage, speakAsPersona } from '@/lib/agents/openai'
+import { interpreterGuidanceText } from '@/lib/learning/adaptation'
+import { validateVoiceEvidence } from '@/lib/voice/profile'
+import { voicePromptBuilderSchema, type VoicePromptBuilderOutput } from '@/lib/voice/schemas'
+import { claimEncounter, loadEncounter, saveMessage, saveReaction, saveVoicePrompt } from './store'
+
+export { claimEncounter }
+type StringIdDocument = { _id: string; [key: string]: any }
+
+function keyForSequence(sequence: number): PersonKey {
+  return sequence % 2 === 0 ? 'a' : 'b'
+}
+
+function validateMessageEvidence(interpretation: SocialInterpretation, message: { _id: unknown; text?: unknown }) {
+  for (const item of interpretation.messageEvidence) {
+    if (item.messageId !== String(message._id) || typeof message.text !== 'string' || !message.text.includes(item.quote))
+      throw new Error('Interpreter cited message evidence that does not exist')
+  }
+}
+
+async function runAgentCall<T>(
+  database: Awaited<ReturnType<typeof loadEncounter>>['database'],
+  encounterId: string,
+  operation: () => Promise<T>,
+) {
+  try {
+    return await operation()
+  } catch (error) {
+    const message = error instanceof Error && error.message.startsWith('OpenAI ')
+      ? error.message
+      : 'The conversation agent failed unexpectedly.'
+    await database.collection<StringIdDocument>('conversation_encounters').updateOne(
+      { _id: encounterId },
+      { $set: { lastError: message, updatedAt: new Date() } },
+    )
+    throw error
+  }
+}
+
+export async function runConversationTurn(encounterId: string, sequence: number) {
+  const { database, encounter, profiles, voiceProfiles, adaptations } = await loadEncounter(encounterId)
+  const existing = await database.collection<StringIdDocument>('agent_messages').findOne({ encounterId, sequence })
+  if (existing) return
+  const historyDocuments = await database.collection<StringIdDocument>('agent_messages').find({ encounterId, sequence: { $lt: sequence } }).sort({ sequence: 1 }).toArray()
+  if (historyDocuments.length !== sequence) throw new Error('Earlier messages are missing')
+  const speakerKey = keyForSequence(sequence)
+  const profile = profiles[speakerKey]
+  const voiceProfile = voiceProfiles[speakerKey]
+  const adaptation = adaptations[speakerKey]
+  const history = historyDocuments.map(item => ({ id: String(item._id), from: item.speakerKey as string, text: item.text as string }))
+  const incoming = historyDocuments.at(-1)
+  let interpretation: SocialInterpretation | null = null
+  let reactionId: string | null = null
+
+  if (incoming) {
+    const storedReaction = await database.collection<StringIdDocument>('agent_reactions').findOne({
+      encounterId, inputMessageId: String(incoming._id), ownerUserId: profile.userId, promptVersion: 'social-interpreter-v2',
+    })
+    if (storedReaction) interpretation = storedReaction.interpretation as SocialInterpretation
+    else {
+      interpretation = await runAgentCall(database, encounterId, () => interpretMessage({
+        profile, model: agentModel(speakerKey, 'reaction'),
+        incomingMessage: { id: String(incoming._id), text: incoming.text as string, from: incoming.speakerKey as string },
+        history, scenario: encounter.scenario, temporaryState: encounter.temporaryState?.[speakerKey] ?? null,
+        adaptationGuidance: interpreterGuidanceText(adaptation),
+      }))
+      validateProfileEvidence(profile, interpretation.evidenceIds)
+      validateMessageEvidence(interpretation, incoming)
+      reactionId = await saveReaction({
+        encounterId, ownerUserId: profile.userId, inputMessageId: String(incoming._id),
+        profileVersionId: profile.profileVersionId,
+        adaptationVersionId: adaptation?.adaptationVersionId ?? null, interpretation, model: agentModel(speakerKey, 'reaction'),
+      })
+      await database.collection<StringIdDocument>('conversation_encounters').updateOne(
+        { _id: encounterId, status: 'running' },
+        { $set: { [`temporaryState.${speakerKey}`]: interpretation.temporaryState, updatedAt: new Date() } },
+      )
+    }
+    reactionId ??= String(storedReaction?._id)
+  }
+
+  const storedVoicePrompt = await database.collection<StringIdDocument>('agent_voice_prompts').findOne({
+    encounterId, ownerUserId: profile.userId, promptVersion: 'voice-prompt-builder-v1',
+  })
+  const parsedStoredVoicePrompt = voicePromptBuilderSchema.safeParse(storedVoicePrompt?.output)
+  let voicePrompt: VoicePromptBuilderOutput | undefined = parsedStoredVoicePrompt.success
+    ? parsedStoredVoicePrompt.data
+    : undefined
+  let voicePromptId = storedVoicePrompt && parsedStoredVoicePrompt.success ? String(storedVoicePrompt._id) : null
+  if (voicePrompt) validateVoiceEvidence(voiceProfile, voicePrompt.evidenceIds)
+  if (!voicePrompt) {
+    voicePrompt = await runAgentCall(database, encounterId, () => buildVoicePrompt({
+      profile, voiceProfile, scenario: encounter.scenario, model: agentModel(speakerKey, 'voice'),
+    }))
+    validateVoiceEvidence(voiceProfile, voicePrompt.evidenceIds)
+    voicePromptId = await saveVoicePrompt({
+      encounterId, ownerUserId: profile.userId,
+      voiceProfileVersionId: voiceProfile.voiceProfileVersionId, output: voicePrompt, model: agentModel(speakerKey, 'voice'),
+    })
+  }
+  if (!voicePromptId) throw new Error('Voice Prompt Builder output was not persisted')
+
+  const output = await runAgentCall(database, encounterId, () => speakAsPersona({
+    profile, model: agentModel(speakerKey, 'speaker'),
+    retrievedContext: encounter.retrievedContext?.[speakerKey] ?? '',
+    incomingMessage: incoming ? { id: String(incoming._id), text: incoming.text as string, from: incoming.speakerKey as string } : null,
+    interpretation, history, scenario: encounter.scenario, voicePrompt,
+  }))
+  validateProfileEvidence(profile, output.usedProfileEvidence)
+  const allowedSignals = new Set(interpretation ? [
+    interpretation.recommendedApproach,
+    interpretation.possibleUserReaction.state,
+    ...interpretation.fourLensAnalysis.values.relevantPreferences,
+  ] : [])
+  if (output.usedInterpretationSignals.some(signal => !allowedSignals.has(signal)))
+    throw new Error('Speaker referenced an interpretation signal that does not exist')
+  await saveMessage({
+    encounterId, sequence, speakerUserId: profile.userId, speakerKey, reactionId,
+    voicePromptId,
+    action: output.action, text: output.text, profileEvidenceIds: output.usedProfileEvidence,
+    reactionEvidenceIds: output.usedInterpretationSignals, lensUsage: output.lensUsage, model: agentModel(speakerKey, 'speaker'),
+  })
+}
+
+export async function completeEncounter(encounterId: string) {
+  const { database, encounter, profiles } = await loadEncounter(encounterId)
+  const messageCount = await database.collection<StringIdDocument>('agent_messages').countDocuments({ encounterId })
+  if (messageCount !== encounter.turns) throw new Error('Conversation is incomplete')
+  const compatibility = calculateCompatibility(profiles.a, profiles.b)
+  await database.collection<StringIdDocument>('conversation_encounters').updateOne(
+    { _id: encounterId, status: 'running' },
+    { $set: { status: 'complete', compatibility, completedAt: new Date(), updatedAt: new Date() } },
+  )
+}
+
+export async function failEncounter(encounterId: string, workflowRunId: string, errorMessage: string) {
+  const { database, encounter } = await loadEncounter(encounterId)
+  const storedError = typeof encounter.lastError === 'string' ? encounter.lastError : errorMessage
+  await database.collection<StringIdDocument>('conversation_encounters').updateOne(
+    { _id: encounterId, workflowRunId, status: 'running' },
+    { $set: { status: 'failed', error: storedError, updatedAt: new Date() } },
+  )
+}

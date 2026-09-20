@@ -5,4 +5,7 @@ minimumReleaseAgeExclude:
   - next
 
 allowBuilds:
+  '@swc/core': true
+  cbor-extract: true
   esbuild: true
+  mongodb-memory-server: false
