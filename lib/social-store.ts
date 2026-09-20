@@ -3,7 +3,7 @@ import 'server-only'
 import { createHash } from 'node:crypto'
 import { ObjectId } from 'mongodb'
 import { getMongoDatabase } from '@/lib/mongodb'
-import type { SocialImportPayload, SocialPlatform } from '@/lib/social-types'
+import type { SocialImportPayload, SocialPlatform, SocialProfilePhoto } from '@/lib/social-types'
 
 const PROFILE_COLLECTIONS: Record<SocialPlatform, string> = {
   linkedin: 'linkedin_profiles',
@@ -40,6 +40,33 @@ function uniqueByExternalId<T extends { externalId: string }>(items: T[]) {
     if (!unique.has(item.externalId)) unique.set(item.externalId, item)
   }
   return Array.from(unique.values())
+}
+
+export async function storeSocialProfilePhoto(payload: SocialProfilePhoto, userId: string) {
+  const database = await getMongoDatabase()
+  const now = new Date()
+  await database.collection(PROFILE_COLLECTIONS[payload.platform]).updateOne(
+    { userId },
+    {
+      $set: {
+        userId,
+        sourceUrl: payload.sourceUrl,
+        url: payload.sourceUrl,
+        handle: payload.handle,
+        avatarUrl: payload.avatarUrl,
+        cachedAvatar: {
+          contentType: payload.profileImage.contentType,
+          data: Buffer.from(payload.profileImage.bytes).toString('base64'),
+          sourceUrl: payload.profileImage.sourceUrl,
+          cachedAt: now,
+        },
+        profileSourceData: payload.profileSourceData,
+        syncedAt: now,
+      },
+      $setOnInsert: { createdAt: now },
+    },
+    { upsert: true },
+  )
 }
 
 export async function storeSocialImport(payload: SocialImportPayload, requestedUserId?: string) {
@@ -82,9 +109,23 @@ export async function storeSocialImport(payload: SocialImportPayload, requestedU
     : existingProfile?._id
       ? { _id: existingProfile._id }
       : { userId }
+  const profileFields: Record<string, unknown> = {
+    ...rawProfile,
+    avatarUrl: payload.profile.avatarUrl,
+    userId,
+    syncedAt: now,
+  }
+  if (payload.profileImage) {
+    profileFields.cachedAvatar = {
+      contentType: payload.profileImage.contentType,
+      data: Buffer.from(payload.profileImage.bytes).toString('base64'),
+      sourceUrl: payload.profileImage.sourceUrl,
+      cachedAt: now,
+    }
+  }
   const profileResult = await profileCollection.findOneAndUpdate(
     profileFilter,
-    { $set: { ...rawProfile, avatarUrl: payload.profile.avatarUrl, userId, syncedAt: now } },
+    { $set: profileFields },
     { upsert: true, returnDocument: 'after' },
   )
   if (!profileResult) throw new Error('MongoDB did not return the stored platform profile')
