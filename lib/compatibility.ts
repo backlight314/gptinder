@@ -4,10 +4,10 @@ export type MeetingIntent = 'agreed' | 'interested' | 'declined' | 'unclear'
 export type ConversationScenario = 'natural' | 'friction'
 export type { CompatibilityAnalysis, CompatibilityVerdict }
 
-export const CONVERSATION_TURNS = 6
+export const CONVERSATION_TURNS = 10
 
 export const scenarioInstructions: Record<ConversationScenario, string> = {
-  natural: `Let the interaction develop from the two snapshots. Positive chemistry, neutrality, uncertainty, or poor fit are all valid outcomes. Do not force either a romantic connection or a rejection.`,
+  natural: `Treat this as mutual discovery, not a performance of chemistry. Be genuinely curious: build on a specific shared interest or value when one appears, ask a focused question that could reveal meaningful common ground, and propose a small, low-pressure idea only when it follows from concrete shared evidence. Do not manufacture agreement, attraction, or a plan merely to keep the exchange warm. If the conversation reveals repeated, concrete incompatibilities in values, preferences, communication pace, or goals—and no meaningful shared ground—respond honestly and kindly that this does not feel like a fit. A respectful decline is a valid outcome. Do not treat missing information or a short conversation as incompatibility: when evidence is thin, remain curious or uncertain rather than rejecting.`,
   friction: `This is a deliberate incompatibility scenario. The agents should develop noticeable interpersonal friction and may strongly dislike the interaction. Make that visible through mismatched pacing, poor reciprocity, impatience, dismissive but civil replies, competing conversational goals, or unresolved disagreement. Do not force warmth, agreement, reconciliation, or a plan to meet. Do not use threats, slurs, harassment, or dehumanizing language.`,
 }
 
@@ -27,6 +27,7 @@ const signalValues = {
 } as const
 
 export function scoreFromAnalysis(analysis: CompatibilityAnalysis) {
+  if (analysis.sharedGround === 'limited') return 50
   const score = (
     signalValues.compatibility[analysis.compatibility] * 0.25
     + signalValues.friction[analysis.friction] * 0.2
@@ -42,10 +43,15 @@ export function finalizeVerdictScores<T extends CompatibilityVerdict>(a: T, b: T
     a: { ...a, score: scoreFromAnalysis(a.analysis) },
     b: { ...b, score: scoreFromAnalysis(b.analysis) },
   }
+  // Limited shared ground is neutral, rather than proof of positive chemistry or a hard conflict.
+  // Either participant can identify it from the shared transcript, so the displayed outcome is reciprocal.
+  const neutralScores = a.analysis.sharedGround === 'limited' || b.analysis.sharedGround === 'limited'
+    ? { a: { ...scored.a, score: 50 }, b: { ...scored.b, score: 50 } }
+    : scored
   const mutualAgreement = a.meetingIntent === 'agreed' && b.meetingIntent === 'agreed'
   const verdicts = mutualAgreement
-    ? { a: { ...scored.a, score: Math.max(1, scored.a.score) }, b: { ...scored.b, score: Math.max(1, scored.b.score) } }
-    : scored
+    ? { a: { ...neutralScores.a, score: Math.max(1, neutralScores.a.score) }, b: { ...neutralScores.b, score: Math.max(1, neutralScores.b.score) } }
+    : neutralScores
   return {
     verdicts,
     compatibilityScore: Math.round((verdicts.a.score + verdicts.b.score) / 2),

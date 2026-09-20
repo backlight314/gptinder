@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { aggregateMeetingIntent, finalizeVerdictScores, scoreFromAnalysis, type CompatibilityAnalysis } from './compatibility'
+import { CONVERSATION_TURNS, aggregateMeetingIntent, finalizeVerdictScores, scoreFromAnalysis, type CompatibilityAnalysis } from './compatibility'
 
 const analysis = (overrides: Partial<CompatibilityAnalysis> = {}): CompatibilityAnalysis => ({
   compatibility: 'mixed',
@@ -7,6 +7,7 @@ const analysis = (overrides: Partial<CompatibilityAnalysis> = {}): Compatibility
   reciprocity: 'mixed',
   pacing: 'mixed',
   connection: 'uncertain',
+  sharedGround: 'unclear',
   rationale: 'The exchange provides mixed evidence.',
   ...overrides,
 })
@@ -25,6 +26,10 @@ describe('compatibility outcome analysis', () => {
     expect(aggregateMeetingIntent('unclear', 'unclear')).toBe('unclear')
   })
 
+  it('uses ten turns so both participants can establish shared ground', () => {
+    expect(CONVERSATION_TURNS).toBe(10)
+  })
+
   it('never returns a zero score when both agents explicitly agree to meet', () => {
     const result = finalizeVerdictScores(verdict('agreed', { compatibility: 'weak', friction: 'high', reciprocity: 'weak', pacing: 'mismatched', connection: 'absent' }), verdict('agreed', { compatibility: 'weak', friction: 'high', reciprocity: 'weak', pacing: 'mismatched', connection: 'absent' }))
     expect(result.compatibilityScore).toBe(1)
@@ -40,11 +45,22 @@ describe('compatibility outcome analysis', () => {
   })
 
   it('derives a strong score from strong conversational evidence', () => {
-    expect(scoreFromAnalysis({ compatibility: 'strong', friction: 'none', reciprocity: 'strong', pacing: 'aligned', connection: 'present', rationale: 'Strong evidence.' })).toBe(100)
+    expect(scoreFromAnalysis({ compatibility: 'strong', friction: 'none', reciprocity: 'strong', pacing: 'aligned', connection: 'present', sharedGround: 'meaningful', rationale: 'Strong evidence.' })).toBe(100)
   })
 
   it('derives a low score from friction and missing connection', () => {
-    expect(scoreFromAnalysis({ compatibility: 'weak', friction: 'high', reciprocity: 'weak', pacing: 'mismatched', connection: 'absent', rationale: 'Weak evidence.' })).toBe(0)
+    expect(scoreFromAnalysis({ compatibility: 'weak', friction: 'high', reciprocity: 'weak', pacing: 'mismatched', connection: 'absent', sharedGround: 'unclear', rationale: 'Weak evidence.' })).toBe(0)
+  })
+
+  it('gives both people a neutral score when either identifies limited shared ground', () => {
+    const result = finalizeVerdictScores(
+      verdict('declined', { compatibility: 'weak', connection: 'absent', sharedGround: 'limited' }),
+      verdict('unclear', { compatibility: 'mixed', connection: 'uncertain', sharedGround: 'unclear' }),
+    )
+    expect(result.verdicts.a.score).toBe(50)
+    expect(result.verdicts.b.score).toBe(50)
+    expect(result.compatibilityScore).toBe(50)
+    expect(result.meetingIntent).toBe('declined')
   })
 
   it('changes with qualitative analysis rather than an arbitrary model number', () => {
