@@ -84,12 +84,19 @@ function Landing({ start, log }: { start: () => void; log: () => void }) {
   return <main className="min-h-screen overflow-hidden bg-transparent"><header className="mx-auto flex max-w-6xl items-center justify-between px-5 py-6 sm:px-8"><button onClick={log} className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"><ListOrdered size={14} /> Conversation log</button></header><section className="relative mx-auto grid max-w-6xl items-center gap-12 px-5 pb-20 pt-12 sm:px-8 lg:grid-cols-[1.05fr_.95fr] lg:gap-20 lg:pb-28 lg:pt-24"><div className="relative z-10"><div className="mb-6 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/8 px-3 py-1.5 text-xs font-semibold text-primary"><Stars size={14} /> Hack the Heart compatibility lab</div><h1 className="max-w-2xl text-5xl font-semibold leading-[.98] tracking-[-.06em] sm:text-7xl">Explore a first conversation between <span className="text-primary">AI selves.</span></h1><p className="mt-7 max-w-lg text-lg leading-relaxed text-muted-foreground">Review two personality snapshots, then watch a private simulation of how they might talk. Nothing is sent to a dating platform or another person.</p><div className="mt-7"><Button onClick={start}>Create the first profile <ArrowRight size={17} /></Button></div></div><div className="relative mx-auto w-full max-w-md"><div className="absolute -inset-8 rounded-full bg-primary/15 blur-3xl" /><div className="relative rounded-[2rem] border border-border bg-card p-6 shadow-2xl shadow-foreground/10"><div className="flex items-center justify-between"><div><p className="text-xs font-semibold uppercase tracking-[.18em] text-muted-foreground">The Hack the Heart lab</p><p className="mt-2 text-2xl font-semibold">A transparent first hello.</p></div><Zap className="text-primary" /></div><div className="mt-8 flex items-center justify-center gap-5"><div className="grid size-16 place-items-center rounded-2xl bg-primary/10 text-primary"><UserRound /></div><Heart className="text-primary" fill="currentColor" size={18} /><div className="grid size-16 place-items-center rounded-2xl bg-accent text-accent-foreground"><MessageCircle /></div></div><div className="mt-8 rounded-2xl bg-muted/60 p-4 text-center text-sm text-muted-foreground">Owner-reviewed details in. A contained simulation out.</div></div></div></section></main>
 }
 
+const parseCsv = (input: string) => input.split(',').map(item => item.trim()).filter(Boolean)
+
 function CsvField({ id, label, hint, value, onChange, disabled = false }: { id: string; label: string; hint: string; value: string[]; onChange: (items: string[]) => void; disabled?: boolean }) {
   const [draft, setDraft] = useState(() => value.join(', '))
-  const parse = (input: string) => input.split(',').map(item => item.trim()).filter(Boolean)
-  useEffect(() => { setDraft(value.join(', ')) }, [value])
+  useEffect(() => {
+    setDraft(current => {
+      const currentItems = parseCsv(current)
+      const matchesValue = currentItems.length === value.length && currentItems.every((item, index) => item === value[index])
+      return matchesValue ? current : value.join(', ')
+    })
+  }, [value])
 
-  return <label className="block" htmlFor={id}><span className="text-sm font-semibold">{label}</span><span className="mt-1 block text-xs text-muted-foreground">{hint}</span><input id={id} disabled={disabled} value={draft} onChange={event => { setDraft(event.target.value); onChange(parse(event.target.value)) }} onBlur={() => { const items = parse(draft); setDraft(items.join(', ')); onChange(items) }} className="mt-2 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none ring-primary focus:ring-2 disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-70" /></label>
+  return <label className="block" htmlFor={id}><span className="text-sm font-semibold">{label}</span><span className="mt-1 block text-xs text-muted-foreground">{hint}</span><input id={id} disabled={disabled} value={draft} onChange={event => { setDraft(event.target.value); onChange(parseCsv(event.target.value)) }} onBlur={() => { const items = parseCsv(draft); setDraft(items.join(', ')); onChange(items) }} className="mt-2 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none ring-primary focus:ring-2 disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-70" /></label>
 }
 
 function ProfilePreview({ persona, user }: { persona: Persona; user: PersonKey }) {
