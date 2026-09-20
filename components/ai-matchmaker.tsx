@@ -53,6 +53,7 @@ type StoredProfile = Persona & {
   source: 'badge_import' | 'persona'
   prefilled: boolean
 }
+type AIMatchmakerProps = { initialProfile?: StoredProfile }
 type PersonaListResponse = { profiles?: StoredProfile[]; error?: string }
 type SocialLinks = { linkedin: string; instagram: string; x: string }
 type ProfileMode = 'stored' | 'new'
@@ -107,7 +108,7 @@ function StoredProfileCard({ profile, selected, onSelect }: { profile: StoredPro
   </button>
 }
 
-function Profile({ user, initial, initialUserId, next, onUserId, back }: { user: PersonKey; initial: Persona; initialUserId?: string; next: (persona: Persona, userId: string) => void; onUserId: (userId: string) => void; back: () => void }) {
+function Profile({ user, initial, initialUserId, next, onUserId, back, selectedPersonTwoName }: { user: PersonKey; initial: Persona; initialUserId?: string; next: (persona: Persona, userId: string) => void | Promise<void>; onUserId: (userId: string) => void; back: () => void; selectedPersonTwoName?: string }) {
   const [persona, setPersona] = useState(initial)
   const [links, setLinks] = useState<SocialLinks>({ linkedin: '', instagram: '', x: '' })
   const [storedProfiles, setStoredProfiles] = useState<StoredProfile[]>([])
@@ -224,7 +225,7 @@ function Profile({ user, initial, initialUserId, next, onUserId, back }: { user:
       setUserId(data.userId)
       onUserId(data.userId)
       if (data.agentContext) setAgentContext(data.agentContext)
-      next(persona, data.userId)
+      await next(persona, data.userId)
     } catch (reason) {
       setSaveError(reason instanceof Error ? reason.message : 'Unable to save this persona.')
     } finally {
@@ -261,6 +262,7 @@ function Profile({ user, initial, initialUserId, next, onUserId, back }: { user:
           <p className="mb-2 text-xs font-semibold uppercase tracking-[.18em] text-primary">{user === 'a' ? 'Person one' : 'Person two'}</p>
           <h1 className="text-4xl font-semibold tracking-tight">Review {user === 'a' ? 'the first' : 'the second'} personality.</h1>
           <p className="mt-2 text-muted-foreground">Choose someone already in the directory for a conservative public-data draft, or import a new profile and write the details yourself.</p>
+          {selectedPersonTwoName && <p className="mt-4 rounded-2xl border border-primary/20 bg-primary/5 p-4 text-sm leading-relaxed"><strong>Person Two selected:</strong> {selectedPersonTwoName}. Add Person One below to go straight to the simulation.</p>}
         </div>
         <div className="grid items-start gap-6 lg:grid-cols-2">
           <section className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-7">
@@ -584,15 +586,34 @@ function DateView({ profiles, userIds, openLog, back }: { profiles: Record<Perso
   return <main className="min-h-screen bg-transparent"><header className="mx-auto flex max-w-6xl items-center justify-between px-5 py-6 sm:px-8"><button onClick={back} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ChevronLeft size={17} /> Profiles</button><div className="flex items-center gap-4"><button onClick={openLog} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ListOrdered size={15} /> Log</button><Stepper step="date" /></div></header><div className="mx-auto max-w-3xl px-5 pb-12 sm:px-8"><div className="mb-7 text-center"><p className="text-xs font-semibold uppercase tracking-[.18em] text-primary">The first conversation</p><h1 className="mt-2 text-4xl font-semibold tracking-tight">Let&apos;s see how they talk.</h1><p className="mt-2 text-muted-foreground">A six-message AI-to-AI simulation. The score is derived from the completed conversation analysis, not profile-field overlap.</p></div><div className="mb-4 rounded-2xl border border-border bg-card p-4"><label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground" htmlFor="conversation-scenario">Scenario</label><select id="conversation-scenario" value={scenario} onChange={event => setScenario(event.target.value as ConversationScenario)} className="mt-2 h-10 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none ring-primary focus:ring-2"><option value="natural">Natural chemistry</option><option value="friction">Built-in friction — poor match</option></select><p className="mt-2 text-xs text-muted-foreground">Friction asks the agents to surface mismatch and dislike while staying civil and safe.</p></div><div className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm"><div className="flex items-center justify-between border-b border-border px-5 py-4"><div className="flex items-center gap-3"><Avatar person={profiles.a} size="sm" /><div className="text-xs"><b>{profiles.a.name}</b><span className="mx-2 text-muted-foreground">and</span><b>{profiles.b.name}</b></div></div><span className="text-xs">{messages.length} / {CONVERSATION_TURNS} messages</span></div><div aria-live="polite" className="min-h-[390px] space-y-4 bg-gradient-to-b from-muted/35 to-background p-5 sm:p-8">{!messages.length && !loading && <div className="grid min-h-[330px] place-items-center text-center text-sm text-muted-foreground">Choose a scenario, then run the six-message simulation.</div>}{loading && !messages.length && <div className="grid min-h-[330px] place-items-center text-center text-sm text-muted-foreground"><span className="animate-pulse">The agents are getting acquainted, then reflecting on the exchange…</span></div>}{messages.map(message => { const reaction = reactions.find(item => item.inputMessageId === message._id); return <div className="space-y-4" key={message._id}><div className={`flex items-end gap-2 ${message.speakerKey === 'b' ? 'flex-row-reverse' : ''}`}><Avatar person={profiles[message.speakerKey]} size="sm" /><div className={`max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${message.speakerKey === 'a' ? 'rounded-bl-md bg-primary/10' : 'rounded-br-md bg-accent'}`}>{message.text}</div></div>{reaction && <InterpretationCard reaction={reaction} ownerName={nameForUser(reaction.ownerUserId)} />}</div>})}{result.status === 'complete' && result.compatibility && <section className="mt-8 border-t border-border pt-8"><div className="text-center"><div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary"><Heart fill="currentColor" size={13} /> Conversation compatibility</div><p className="mt-3 text-sm text-muted-foreground">Qualitative analysis covers compatibility, friction, reciprocity, pacing, connection, and meeting intent.</p>{result.compatibility.score === null ? <p className="mt-5 text-sm font-semibold">Compatibility score unavailable for this run.</p> : <div className="mx-auto mt-5 grid size-28 place-items-center rounded-full border-8 border-primary/15 bg-card text-4xl font-semibold text-primary">{result.compatibility.score}</div>}{result.compatibility.meetingIntent && <p className="mx-auto mt-4 max-w-md rounded-xl bg-muted/50 p-3 text-sm"><b>Overall meeting intent:</b> {result.compatibility.meetingIntent}</p>}{verdicts && <div className="mt-6 grid gap-3 sm:grid-cols-2"><CompatibilityVerdictCard person={profiles.a} verdict={verdicts.a} /><CompatibilityVerdictCard person={profiles.b} verdict={verdicts.b} /></div>}<div className="mt-6 grid gap-2">{result.compatibility.features.map(feature => <div key={feature.key} className="flex items-start justify-between gap-4 rounded-xl border border-border bg-card p-3 text-xs"><span className="font-semibold capitalize">{feature.key.replaceAll(/([A-Z])/g, ' $1')}</span><span className="max-w-[70%] text-right text-muted-foreground">{feature.detail}</span></div>)}</div></div></section>}{result.status === 'complete' && result.encounterId && <DateFeedback encounterId={result.encounterId} initialFeedback={result.feedback ?? null} />}{error && <p role="alert" className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}</div><div className="flex items-center justify-between border-t border-border px-5 py-4"><span className="text-xs text-muted-foreground">{loading ? `Workflow ${result.status?.replaceAll('_', ' ') ?? 'starting'}` : result.status === 'complete' ? 'Complete' : 'Ready'}</span><Button variant="secondary" onClick={startConversation} disabled={loading}>{loading ? 'Running…' : messages.length ? 'Run another simulation' : 'Start simulation'} {messages.length ? <RefreshCw size={15} /> : <Sparkles size={15} />}</Button></div></div></div></main>
 }
 
-export default function AIMatchmaker() {
-  const [step, setStep] = useState<Step>('landing')
-  const [profiles, setProfiles] = useState<Record<PersonKey, Persona>>(starterPersonas)
-  const [userIds, setUserIds] = useState<Partial<Record<PersonKey, string>>>({})
+export default function AIMatchmaker({ initialProfile }: AIMatchmakerProps) {
+  const selectedPersona = initialProfile ? {
+    name: initialProfile.name,
+    bio: initialProfile.bio,
+    traits: [...initialProfile.traits],
+    interests: [...initialProfile.interests],
+    style: initialProfile.style,
+    values: [...initialProfile.values],
+    lifeGoals: { ...initialProfile.lifeGoals },
+    relationshipPreferences: { ...initialProfile.relationshipPreferences },
+  } : starterPersonas.b
+  const [step, setStep] = useState<Step>(initialProfile ? 'profile-a' : 'landing')
+  const [profiles, setProfiles] = useState<Record<PersonKey, Persona>>({ ...starterPersonas, b: selectedPersona })
+  const [userIds, setUserIds] = useState<Partial<Record<PersonKey, string>>>(initialProfile ? { b: initialProfile.userId } : {})
   const [openEncounterId, setOpenEncounterId] = useState<string | null>(null)
-  const saveProfile = (user: PersonKey) => (persona: Persona, _userId: string) => {
+  const saveProfile = (user: PersonKey) => async (persona: Persona, _userId: string) => {
+    if (user === 'a' && initialProfile) {
+      const response = await fetch('/api/personas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slot: 'b', userId: initialProfile.userId, badgeId: initialProfile.badgeId, persona: selectedPersona }),
+      })
+      const data = await response.json().catch(() => ({})) as PersonaSaveResponse
+      if (!response.ok || !data.userId) throw new Error(data.error ?? 'Unable to prepare the selected profile.')
+    }
     setProfiles(current => ({ ...current, [user]: persona }))
     setUserIds(current => ({ ...current, [user]: _userId }))
-    setStep(user === 'a' ? 'profile-b' : 'date')
+    setStep(user === 'a' ? (initialProfile ? 'date' : 'profile-b') : 'date')
   }
   const rememberUserId = (user: PersonKey) => (userId: string) => {
     setUserIds(current => ({ ...current, [user]: userId || undefined }))
@@ -604,9 +625,9 @@ export default function AIMatchmaker() {
   if (step === 'log' && openEncounterId) return <LogEncounterView encounterId={openEncounterId} back={() => setOpenEncounterId(null)} />
   if (step === 'log') return <ConversationLog back={() => setStep('landing')} open={setOpenEncounterId} />
   if (step === 'landing') return <Landing start={() => setStep('profile-a')} log={openLog} />
-  if (step === 'profile-a') return <Profile key="profile-a" user="a" initial={profiles.a} initialUserId={userIds.a} next={saveProfile('a')} onUserId={rememberUserId('a')} back={() => setStep('landing')} />
+  if (step === 'profile-a') return <Profile key="profile-a" user="a" initial={profiles.a} initialUserId={userIds.a} next={saveProfile('a')} onUserId={rememberUserId('a')} back={() => setStep('landing')} selectedPersonTwoName={initialProfile?.name} />
   if (step === 'profile-b') return <Profile key="profile-b" user="b" initial={profiles.b} initialUserId={userIds.b} next={saveProfile('b')} onUserId={rememberUserId('b')} back={() => setStep('profile-a')} />
-  return <DateView profiles={profiles} userIds={userIds} openLog={openLog} back={() => setStep('profile-b')} />
+  return <DateView profiles={profiles} userIds={userIds} openLog={openLog} back={() => setStep(initialProfile ? 'profile-a' : 'profile-b')} />
 }
 
 export type { Persona }

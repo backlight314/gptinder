@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { ArrowLeft, ArrowUpRight, ContactRound, Sparkles, Users } from 'lucide-react'
+import { ArrowLeft, ArrowUpRight, ContactRound, MessageCircle, Sparkles, Users } from 'lucide-react'
 import SiteNav from '@/components/site-nav'
 import ProfileAvatar from '@/components/profile-avatar'
 import { notFound } from 'next/navigation'
@@ -56,6 +56,14 @@ export default async function PersonPage({ params }: Props) {
         </div> : <div className="analysis-empty">Their story starts with a hello. Analyze the available social profiles to discover interests, conversation ideas, and a profile photo when available.</div>}
       </section>
     </div>
+    <section className="profile-simulation glass-panel">
+      <div>
+        <p className="eyebrow">PRIVATE AI CONVERSATION SIMULATION</p>
+        <h2>See how the conversation could unfold.</h2>
+        <p>Use {profile.name.split(' ')[0]} as Person Two, add Person One, and preview a first conversation between their AI personality snapshots.</p>
+      </div>
+      <Link href={`/lab?profileB=${encodeURIComponent(profile.badgeId)}`} className="profile-simulation-button"><MessageCircle size={18} /> Simulate an AI conversation</Link>
+    </section>
     {connections.length > 0 && <section className="mt-9"><h2 className="section-title"><Users size={19} /> People in their circle <span className="count-pill">{profile.connectionCount}</span></h2><div className="connection-list">{connections.map(connection => <Link key={connection.badgeId} href={`/people/${connection.badgeId}`} className="glass-panel connection-card"><ProfileAvatar name={connection.name} /><div><p>{connection.name}</p><p className="badge-id">{connection.badgeId}</p></div></Link>)}</div></section>}
     <footer className="profile-meta">First connected {new Date(profile.firstImportedAt).toLocaleDateString('en-CA')} · Updated {new Date(profile.lastImportedAt).toLocaleDateString('en-CA')}</footer>
   </div></main>
