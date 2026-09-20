@@ -112,18 +112,29 @@ Each verdict uses this server-validated shape:
 
 ```ts
 type CompatibilityVerdict = {
-  score: number // integer from 0 through 100
   summary: string // at most 60 words
   strengths: string[] // 1–3 grounded observations
-  considerations: string[] // 0–2 grounded observations
+  considerations: string[] // 1–3 grounded observations
+  analysis: {
+    compatibility: 'strong' | 'mixed' | 'weak'
+    friction: 'none' | 'low' | 'moderate' | 'high'
+    reciprocity: 'strong' | 'mixed' | 'weak'
+    pacing: 'aligned' | 'mixed' | 'mismatched'
+    connection: 'present' | 'uncertain' | 'absent'
+    rationale: string
+  }
+  meetingIntent: 'agreed' | 'interested' | 'declined' | 'unclear'
 }
 ```
 
-The end-of-conversation UI will show each agent's perspective and score, plus
-a **combined compatibility score** calculated by the server as
+The model supplies qualitative analysis, not a numeric score. The server maps
+the five qualitative signals to a bounded 0–100 score using a deterministic
+rubric, then calculates the **combined compatibility score** as
 `Math.round((a.score + b.score) / 2)`. A third model must not generate that
-combined score. Label it as an AI simulation based on one short conversation,
-not an objective measure or real-world promise.
+combined score. If both agents explicitly agree to meet, the server floors
+each derived score at 1 so an agreement cannot render as zero. Label the
+result as an AI simulation based on one short conversation, not an objective
+measure or real-world promise.
 
 ### Implementation requirements
 
@@ -162,11 +173,12 @@ not an objective measure or real-world promise.
    server-calculated combined compatibility score as described above. The
    verdict first analyzes compatibility, friction, reciprocity, pacing, and
    connection, then derives `meetingIntent` as `agreed`, `interested`,
-   `declined`, or `unclear`. The rubric scores reciprocal substance and
-   conversational fit, not generic politeness or agreement. If both agents
-   explicitly agree to meet, the server prevents a zero score. If a verdict
-   cannot be produced, it still returns the transcript and marks the verdict
-   unavailable.
+   `declined`, or `unclear`. The server derives the numeric score from those
+   qualitative signals, so the model cannot return an arbitrary number. The
+   rubric scores reciprocal substance and conversational fit, not generic
+   politeness or agreement. If both agents explicitly agree to meet, the
+   server prevents a zero score. If a verdict cannot be produced, it still
+   returns the transcript and marks the verdict unavailable.
 
 ## Scenario modes
 
