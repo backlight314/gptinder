@@ -1,10 +1,11 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { ArrowLeft, ContactRound, Sparkles, Users } from 'lucide-react'
+import { ArrowLeft, ArrowUpRight, ContactRound, Sparkles, Users } from 'lucide-react'
 import SiteNav from '@/components/site-nav'
 import ProfileAvatar from '@/components/profile-avatar'
 import { notFound } from 'next/navigation'
 import ProfileAnalyzer from '@/components/profile-analyzer'
+import MessagingConnections from '@/components/messaging-connections'
 import { getPublicProfile, listProfileConnections } from '@/lib/airos-directory-store'
 
 export const dynamic = 'force-dynamic'
@@ -21,7 +22,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 function ContactLink({ label, value, href }: { label: string; value: string | null; href?: string }) {
   if (!value) return null
-  return <div className="contact-row"><p>{label}</p>{href ? <a href={href} target="_blank" rel="noreferrer">{value.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')} ↗</a> : <p>{value}</p>}</div>
+  return <div className="contact-row"><p>{label}</p>{href ? <a href={href} target="_blank" rel="noreferrer"><span>{value.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')}</span><span className="contact-arrow" aria-hidden="true"><ArrowUpRight size={13} strokeWidth={2} /></span></a> : <p>{value}</p>}</div>
 }
 
 export default async function PersonPage({ params }: Props) {
@@ -37,12 +38,13 @@ export default async function PersonPage({ params }: Props) {
       <div className="profile-heading-body">
         <div className="profile-identity"><ProfileAvatar key={profile.avatarUrl} name={profile.name} src={profile.avatarUrl} alternatives={profile.avatarAlternatives} large /><span className="badge-label"><span className="live-dot" /> Badge imported</span></div>
         <h1>{profile.name}</h1><p className="person-role">{profile.role && !/^\d+$/.test(profile.role) ? profile.role : 'Hack the North participant'}</p><p className="badge-id">{profile.badgeId}</p>
-        <div className="profile-stats"><span><strong>{profile.connectionCount}</strong> connections</span><span><strong>{profile.observationCount}</strong> encounters recorded</span></div>
+        <div className="profile-stats"><span><strong>{profile.connectionCount}</strong> {profile.connectionCount === 1 ? 'connection' : 'connections'}</span><span><strong>{profile.observationCount}</strong> {profile.observationCount === 1 ? 'encounter' : 'encounters'} recorded</span></div>
       </div>
     </header>
     <div className="profile-columns">
       <section className="glass-panel profile-section"><h2 className="section-title"><ContactRound size={19} /> Keep in touch</h2><p className="section-intro">The details they shared on their badge.</p>
         <ContactLink label="Email" value={profile.email} href={profile.email ? `mailto:${profile.email}` : undefined} /><ContactLink label="Phone" value={profile.phone} href={profile.phone ? `tel:${profile.phone}` : undefined} /><ContactLink label="LinkedIn" value={profile.linkedin} href={profile.linkedin || undefined} /><ContactLink label="Instagram" value={profile.instagram} href={profile.instagram || undefined} /><ContactLink label="X / Twitter" value={profile.x} href={profile.x || undefined} /><ContactLink label="Discord" value={profile.discord} />
+        <MessagingConnections {...profile.messagingConnections} />
         {!hasContacts && <p className="analysis-empty">No contact links have been shared on this badge yet.</p>}
       </section>
       <section className="glass-panel profile-section"><h2 className="section-title"><Sparkles size={19} /> A little more about {profile.name.split(' ')[0]}</h2><p className="section-intro">Explore shared interests and find a thoughtful way to start your next conversation.</p><div className="mt-5"><ProfileAnalyzer badgeId={profile.badgeId} /></div>

@@ -1,8 +1,9 @@
 import Link from 'next/link'
-import { ArrowUpRight, Search, Usb, Users, ArrowRight } from 'lucide-react'
+import { ArrowLeft, ArrowUpRight, Search, Usb, Users, ArrowRight } from 'lucide-react'
 import InteractiveHeart from '@/components/interactive-heart'
 import SiteNav from '@/components/site-nav'
 import ProfileAvatar from '@/components/profile-avatar'
+import DemoReset from '@/components/demo-reset'
 import { listPublicProfiles } from '@/lib/airos-directory-store'
 
 export const dynamic = 'force-dynamic'
@@ -46,15 +47,19 @@ export default async function DirectoryPage({ searchParams }: Props) {
         {directory.configured && !error && directory.profiles.length === 0 && <div className="glass-panel empty-state"><div className="empty-icon">{query ? <Search size={28} /> : <Usb size={28} />}</div><p className="eyebrow">{query ? 'KEEP LOOKING' : 'EVERY CONNECTION STARTS SOMEWHERE'}</p><h2>{query ? 'No one here by that name.' : 'Your first hello belongs here.'}</h2><p>{query ? 'Try another name or badge ID to find your person.' : 'Connect your badge, preview your contacts, and give those conversations a place to grow.'}</p><Link href={query ? '/' : '/import'} className="primary-button">{query ? 'View everyone' : 'Import your first badge'} <ArrowUpRight size={16} /></Link></div>}
         <div className="people-grid">
           {directory.profiles.map(profile => <Link key={profile.badgeId} href={`/people/${profile.badgeId}`} className="person-card glass-panel">
-            <div className="person-card-top"><ProfileAvatar name={profile.name} /><span className="card-arrow"><ArrowUpRight size={18} /></span></div>
+            <div className="person-card-top"><ProfileAvatar name={profile.name} src={profile.avatarUrl} /><span className="card-arrow"><ArrowUpRight size={18} /></span></div>
             <h3>{profile.name}</h3><p className="person-role">{profile.role && !/^\d+$/.test(profile.role) ? profile.role : 'Hack the North participant'}</p>
             <p className="badge-id">{profile.badgeId}</p>
             <div className="person-card-footer"><span><span className="live-dot" /> Badge imported</span><span>{socialCount(profile)} social link{socialCount(profile) === 1 ? '' : 's'}</span></div>
           </Link>)}
         </div>
-        {pages > 1 && <nav aria-label="Directory pages" className="pagination"><Link aria-disabled={directory.page <= 1} className={directory.page <= 1 ? 'pointer-events-none opacity-40' : ''} href={`/?${new URLSearchParams({ ...(query ? { q: query } : {}), page: String(directory.page - 1) })}`}>← Previous</Link><span>{directory.page} / {pages}</span><Link aria-disabled={directory.page >= pages} className={directory.page >= pages ? 'pointer-events-none opacity-40' : ''} href={`/?${new URLSearchParams({ ...(query ? { q: query } : {}), page: String(directory.page + 1) })}`}>Next →</Link></nav>}
+        {pages > 1 && <nav aria-label="Directory pages" className="pagination">
+          <Link aria-disabled={directory.page <= 1} tabIndex={directory.page <= 1 ? -1 : undefined} className={`pagination-link pagination-previous${directory.page <= 1 ? ' is-disabled' : ''}`} href={`/?${new URLSearchParams({ ...(query ? { q: query } : {}), page: String(directory.page - 1) })}`}><span className="pagination-arrow"><ArrowLeft size={16} strokeWidth={2} /></span><span>Previous</span></Link>
+          <span className="pagination-count" aria-label={`Page ${directory.page} of ${pages}`}><strong>{directory.page}</strong><span>of</span><strong>{pages}</strong></span>
+          <Link aria-disabled={directory.page >= pages} tabIndex={directory.page >= pages ? -1 : undefined} className={`pagination-link pagination-next${directory.page >= pages ? ' is-disabled' : ''}`} href={`/?${new URLSearchParams({ ...(query ? { q: query } : {}), page: String(directory.page + 1) })}`}><span>Next</span><span className="pagination-arrow"><ArrowRight size={16} strokeWidth={2} /></span></Link>
+        </nav>}
       </section>
-      <footer className="site-footer shell"><span>hack the heart.</span><p>Less scrolling. More connecting.</p><InteractiveHeart label="Send love from the footer" /></footer>
+      <footer className="site-footer shell"><span>hack the heart.</span><p>Less scrolling. More connecting.</p><div className="footer-actions"><DemoReset /><InteractiveHeart label="Send love from the footer" /></div></footer>
     </main>
   )
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { profilePhoto } from './profile-photo'
+import { profileInitials, profilePhoto, safeProviderPhotoUrl } from './profile-photo'
 
 describe('profile photo selection', () => {
   it('reads normalized and legacy social provider photos', () => {
@@ -13,5 +13,20 @@ describe('profile photo selection', () => {
     expect(profilePhoto({ avatarUrl: 'javascript:alert(1)' })).toBeNull()
     expect(profilePhoto({ avatarUrl: 'https://user:password@example.com/a' })).toBeNull()
     expect(profilePhoto({ avatarUrl: 'invalid', photo: 'https://example.com/fallback.jpg' })).toBe('https://example.com/fallback.jpg')
+  })
+})
+
+describe('profile photo presentation', () => {
+  it('creates useful initials for the local fallback', () => {
+    expect(profileInitials('Rohanth Marem')).toBe('RM')
+    expect(profileInitials('Rohanth')).toBe('R')
+    expect(profileInitials('  ')).toBe('?')
+  })
+
+  it('only permits known social image CDNs for server proxying', () => {
+    expect(safeProviderPhotoUrl('https://media.licdn.com/photo.jpg', 'linkedin')).toBe('https://media.licdn.com/photo.jpg')
+    expect(safeProviderPhotoUrl('https://pbs.twimg.com/photo.jpg', 'x')).toBe('https://pbs.twimg.com/photo.jpg')
+    expect(safeProviderPhotoUrl('https://scontent.cdninstagram.com/photo.jpg', 'instagram')).toBe('https://scontent.cdninstagram.com/photo.jpg')
+    expect(safeProviderPhotoUrl('https://127.0.0.1/private', 'linkedin')).toBeNull()
   })
 })
