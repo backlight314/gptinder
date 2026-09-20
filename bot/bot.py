@@ -121,9 +121,8 @@ async def export_everyone(channel) -> tuple[dict[int, list[dict]], list[int], in
 
 @bot.command(name="exportall")
 @commands.guild_only()
-@commands.has_guild_permissions(manage_guild=True)
 async def export_all(ctx: commands.Context):
-    """Export everyone's messages from this channel, each stored under their own Discord id (needs Manage Server)."""
+    """Export everyone's messages from this channel, each stored under their own Discord id (any member, server channels only)."""
     async with ctx.typing():
         by_author, sent, failed = await export_everyone(ctx.channel)
     if not by_author:
@@ -139,9 +138,8 @@ async def export_all(ctx: commands.Context):
 
 @bot.command(name="personaall")
 @commands.guild_only()
-@commands.has_guild_permissions(manage_guild=True)
 async def persona_all(ctx: commands.Context):
-    """Export everyone's messages here and build each person's persona under their own id (needs Manage Server)."""
+    """Export everyone's messages here and build each person's persona under their own id (any member, server channels only)."""
     async with ctx.typing():
         by_author, sent, failed = await export_everyone(ctx.channel)
         if not by_author:
@@ -172,16 +170,16 @@ async def persona_all(ctx: commands.Context):
 
 @persona_all.error
 async def persona_all_error(ctx: commands.Context, error: commands.CommandError):
-    if isinstance(error, (commands.MissingPermissions, commands.NoPrivateMessage)):
-        await ctx.reply("`!personaall` needs the Manage Server permission and only works in a server channel.")
+    if isinstance(error, commands.NoPrivateMessage):
+        await ctx.reply("`!personaall` only works in a server channel.")
     else:
         raise error
 
 
 @export_all.error
 async def export_all_error(ctx: commands.Context, error: commands.CommandError):
-    if isinstance(error, (commands.MissingPermissions, commands.NoPrivateMessage)):
-        await ctx.reply("`!exportall` needs the Manage Server permission and only works in a server channel.")
+    if isinstance(error, commands.NoPrivateMessage):
+        await ctx.reply("`!exportall` only works in a server channel.")
     else:
         raise error
 
