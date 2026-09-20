@@ -3,10 +3,15 @@ import json
 import logging
 import os
 import re
+import time
+from collections import Counter
+from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from app.discord_store import DATA_DIR
 from app.llm import extract_structured
 from app.schemas import (
+    MAX_MESSAGES_PER_REQUEST,
     CommunicationProfile,
     DecisionsProfile,
     EmotionsProfile,
@@ -24,6 +29,9 @@ PROCESSED_DIR = DATA_DIR / "processed"
 # (newest messages kept) so a very large export can't blow the context window.
 MAX_RAW_CHARS = int(os.environ.get("PERSONA_MAX_RAW_CHARS", "60000"))
 
+# The persona is built from the newest N messages across all sources: what one ingest request can hold.
+MAX_PERSONA_MESSAGES = int(os.environ.get("PERSONA_MAX_MESSAGES", str(MAX_MESSAGES_PER_REQUEST)))
+
 _USER_ID_RE = re.compile(r"^[A-Za-z0-9-]{1,64}$")
 
 _GROUNDING_NOTE = (
@@ -34,11 +42,29 @@ _GROUNDING_NOTE = (
 
 # ---------- loading ----------
 
-def load_user_messages(user_id: str) -> list[str]:
-    """Message strings from every data/raw/<user_id>_<source>.json, in filename order.
+@dataclass(frozen=True)
+class UserMessage:
+    text: str
+    source: str  # "discord", "whatsapp", ... from the file name
+    when: datetime | None  # None for files that store no timestamps
 
-    Each file may hold {"messages": [...]} or a bare list; items are strings or
-    {"content": ...} objects. Files are assumed to contain only this user's messages.
+
+def _parse_when(value) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        when = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    return when if when.tzinfo else when.replace(tzinfo=timezone.utc)
+
+
+def load_user_records(user_id: str) -> list[UserMessage]:
+    """Messages from every data/raw/<user_id>_<source>.json, merged into one oldest-to-newest list.
+
+    Each file may hold {"messages": [...]} or a bare list; items are strings or {"content": ...}
+    objects (extra fields such as message_id are ignored). Files without timestamps sort first, in file
+    order. Files are assumed to contain only this user's messages.
     """
     if not _USER_ID_RE.match(user_id):
         raise ValueError(f"Invalid user_id: {user_id!r}")
@@ -46,8 +72,9 @@ def load_user_messages(user_id: str) -> list[str]:
     if not paths:
         raise FileNotFoundError(f"No raw data found for user {user_id} in {RAW_DIR}")
 
-    messages: list[str] = []
+    records: list[UserMessage] = []
     for path in paths:
+        source = path.stem[len(user_id) + 1 :]
         data = json.loads(path.read_text())
         items = data["messages"] if isinstance(data, dict) else data
         for item in items:
@@ -55,11 +82,19 @@ def load_user_messages(user_id: str) -> list[str]:
             if not isinstance(text, str):
                 raise ValueError(f"Unrecognized message format in {path.name}: {item!r}")
             if text.strip():
-                messages.append(text.strip())
-    return messages
+                when = _parse_when(item.get("timestamp")) if isinstance(item, dict) else None
+                records.append(UserMessage(text.strip(), source, when))
+    floor = datetime.min.replace(tzinfo=timezone.utc)
+    order = sorted(range(len(records)), key=lambda i: (records[i].when or floor, i))
+    return [records[i] for i in order]
 
 
-def _build_raw_text(messages: list[str]) -> str:
+def load_user_messages(user_id: str) -> list[str]:
+    """Just the message texts of load_user_records, oldest to newest."""
+    return [r.text for r in load_user_records(user_id)]
+
+
+def _newest_within_char_cap(messages: list[str]) -> list[str]:
     kept: list[str] = []
     total = 0
     for message in reversed(messages):
@@ -72,7 +107,31 @@ def _build_raw_text(messages: list[str]) -> str:
             "Sending the newest %d of %d messages to the LLM (PERSONA_MAX_RAW_CHARS=%d)",
             len(kept), len(messages), MAX_RAW_CHARS,
         )
-    return "\n".join(reversed(kept))
+    return kept[::-1]
+
+
+def _build_raw_text(messages: list[str]) -> str:
+    return "\n".join(_newest_within_char_cap(messages))
+
+
+_SOURCE_DESCRIPTIONS = {
+    "discord": "Discord chat messages",
+    "whatsapp": "WhatsApp messages (personal chats and groups)",
+}
+
+
+def _source_note(sources: dict[str, int] | None) -> str:
+    """Tells the model where the messages came from; empty when the source counts aren't known."""
+    if not sources:
+        return ""
+    parts = ", ".join(
+        f"{count} {_SOURCE_DESCRIPTIONS.get(name, f'{name} messages')}" for name, count in sorted(sources.items())
+    )
+    return (
+        f"\nSource context: these are all the person's own messages - {parts}. Chat messages, direct "
+        "messages especially, are casual and short and can mix languages; judge style and depth relative "
+        "to that, and do not read brevity, slang or switching languages as coldness or lack of substance."
+    )
 
 
 # ---------- grounding text ----------
@@ -87,26 +146,26 @@ def _emoji_cadence(frequency: float) -> str:
 
 # ---------- the four extraction calls ----------
 
-async def extract_communication(raw_text: str, stats: dict) -> dict:
+async def extract_communication(raw_text: str, stats: dict, sources: dict[str, int] | None = None) -> dict:
     system = f"""Analyze this person's texting/writing style from the messages below.
 Return tone, humor_style, typical_message_length, favorite_phrases, and emoji_usage,
 based only on evidence in the text.
 
 Grounding context: this person's messages average {stats['avg_message_length']:.1f} words
-and {_emoji_cadence(stats['emoji_frequency'])}. {_GROUNDING_NOTE}"""
+and {_emoji_cadence(stats['emoji_frequency'])}. {_GROUNDING_NOTE}{_source_note(sources)}"""
     result = await extract_structured(system, raw_text, CommunicationProfile)
     return result.model_dump()
 
 
-async def extract_preferences(raw_text: str, stats: dict) -> dict:
-    system = """Extract this person's interests, hobbies, and values from the messages below.
+async def extract_preferences(raw_text: str, stats: dict, sources: dict[str, int] | None = None) -> dict:
+    system = f"""Extract this person's interests, hobbies, and values from the messages below.
 Return interests, hobbies, values, and dislikes as short, concrete lists grounded in
-the text - avoid generic filler like "having fun" or "meeting new people"."""
+the text - avoid generic filler like "having fun" or "meeting new people".{_source_note(sources)}"""
     result = await extract_structured(system, raw_text, PreferencesProfile)
     return result.model_dump()
 
 
-async def extract_emotions(raw_text: str, stats: dict) -> dict:
+async def extract_emotions(raw_text: str, stats: dict, sources: dict[str, int] | None = None) -> dict:
     system = f"""Analyze this person's emotional patterns from the messages below.
 Return expressiveness, what_excites_them, what_makes_them_guarded, affection_style,
 and conflict_style, based only on evidence in the text.
@@ -118,12 +177,12 @@ Grounding context (VADER sentiment scores run from -1 very negative to +1 very p
   from message to message (volatile); lower means a steady, even tone.
 - exclamation marks: {stats['exclamation_frequency']:.2f} per message. Higher suggests
   outward enthusiasm; very low suggests a more reserved delivery.
-{_GROUNDING_NOTE}"""
+{_GROUNDING_NOTE}{_source_note(sources)}"""
     result = await extract_structured(system, raw_text, EmotionsProfile)
     return result.model_dump()
 
 
-async def extract_decisions(raw_text: str, stats: dict) -> dict:
+async def extract_decisions(raw_text: str, stats: dict, sources: dict[str, int] | None = None) -> dict:
     hedge = stats["hedge_word_ratio"] * 100
     decisive = stats["decisive_word_ratio"] * 100
     system = f"""Analyze how this person makes decisions from the messages below.
@@ -136,7 +195,7 @@ Grounding context:
 - decisive words ("definitely", "always", "let's", "already", ...): {decisive:.2f} per 100
   words. Higher suggests firm, action-oriented, quick-to-commit decision-making.
 Compare the two: hedging well above decisiveness leans deliberate and cautious; the reverse
-leans spontaneous and decisive. {_GROUNDING_NOTE}"""
+leans spontaneous and decisive. {_GROUNDING_NOTE}{_source_note(sources)}"""
     result = await extract_structured(system, raw_text, DecisionsProfile)
     return result.model_dump()
 
@@ -144,18 +203,29 @@ leans spontaneous and decisive. {_GROUNDING_NOTE}"""
 # ---------- the pipeline ----------
 
 async def build_persona(user_id: str, name: str) -> dict:
-    messages = load_user_messages(user_id)
-    if not messages:
+    started = time.perf_counter()
+    records = load_user_records(user_id)
+    if not records:
         raise ValueError(f"User {user_id} has raw data files but no message text")
 
-    stats = compute_stats(messages)
-    raw_text = _build_raw_text(messages)
+    found = len(records)
+    records = records[-MAX_PERSONA_MESSAGES:]  # the newest N across every source
+    texts = [r.text for r in records]
+    stats = compute_stats(texts)
+    kept = _newest_within_char_cap(texts)
+    sent = records[len(records) - len(kept):]
+    raw_text = "\n".join(kept)
+    sources = dict(Counter(r.source for r in sent))
+    logger.info(
+        "build_persona: %d messages found, %d used for stats, %d (%d chars) sent to the LLM; sources=%s",
+        found, len(records), len(sent), len(raw_text), sources,
+    )
 
     communication, preferences, emotions, decisions = await asyncio.gather(
-        extract_communication(raw_text, stats),
-        extract_preferences(raw_text, stats),
-        extract_emotions(raw_text, stats),
-        extract_decisions(raw_text, stats),
+        extract_communication(raw_text, stats, sources),
+        extract_preferences(raw_text, stats, sources),
+        extract_emotions(raw_text, stats, sources),
+        extract_decisions(raw_text, stats, sources),
     )
 
     persona = {
@@ -173,4 +243,5 @@ async def build_persona(user_id: str, name: str) -> dict:
     tmp = path.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(persona, indent=2, ensure_ascii=False))
     os.replace(tmp, path)
+    logger.info("build_persona: done in %.1fs", time.perf_counter() - started)
     return persona

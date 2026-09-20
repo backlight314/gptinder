@@ -100,3 +100,38 @@ without them asking.
    messages, as a `--- Discord messages ---` section, to the text (alongside any
    profile or WhatsApp text in the request) that feeds the four extraction calls.
    It returns 404 if that user has no export yet.
+
+## WhatsApp data source
+
+You can add your side of a WhatsApp chat as a second source for persona building. Nothing talks to
+WhatsApp or Meta: you export a chat yourself and import the file.
+
+**Export a chat**
+- iPhone: open the chat, tap the contact or group name, then **Export Chat** and **Without Media**.
+  Save the `.zip` (or `.txt`).
+- Android: open the chat, then ⋮ → **More** → **Export chat** → **Without media**. Save the `.txt`.
+
+**Import it** (from `backend/`):
+
+```bash
+.venv/bin/python scripts/import_whatsapp.py "<path to .txt or .zip>" <user_id> "<your name in the chat>"
+```
+
+- `<your name in the chat>` must be your name exactly as WhatsApp shows it in that chat (or your phone
+  number if you aren't saved as a contact). Only your own messages are kept; everyone else's text is
+  discarded while the file is parsed, and system, media and deleted-message lines are skipped.
+- Use the same `<user_id>` as your Discord id to build one persona from both sources. The messages go to
+  `data/raw/<user_id>_whatsapp.json`, next to `<user_id>_discord.json`.
+- The date order (dd/mm or mm/dd) is inferred from the file (any day above 12). If the file can't tell,
+  dd/mm is assumed and the script says so; rerun with `--date-order mdy` if that was wrong.
+- Importing the same export again, or a newer one, only adds the new messages. Caps match Discord: 4,000
+  characters per message and the newest 10,000 messages per import.
+- Exports carry no timezone, so times are stored as written and labelled UTC.
+
+The same import is available over HTTP: `POST /ingest/whatsapp` with
+`{"user_id", "display_name", "export_text", "date_order"?}` and the `X-Ingest-Token` header when
+`INGEST_TOKEN` is set.
+
+`scripts/test_extraction.py <user_id>` then reads both files, merges them by time, uses the newest 10,000
+messages (`PERSONA_MAX_MESSAGES`) and tells the model which sources they came from. Logs contain counts
+and timings only, never message text.
