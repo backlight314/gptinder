@@ -1,10 +1,11 @@
 // @vitest-environment node
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { MongoMemoryServer } from 'mongodb-memory-server'
 import { GET as getPhoto } from '@/app/api/airos/profiles/[badgeId]/photo/route'
 import { resetAirosDemoData } from '@/lib/airos-demo-reset'
 import { getPublicProfile, listPublicProfiles } from '@/lib/airos-directory-store'
 import { getMongoDatabase } from '@/lib/mongodb'
+import { enforceAirosRateLimit } from '@/lib/airos-api'
 
 let mongo: MongoMemoryServer
 let database: Awaited<ReturnType<typeof getMongoDatabase>>
@@ -50,6 +51,15 @@ afterAll(async () => {
 })
 
 describe('AIROS profile photo and demo reset', () => {
+  it('allows localhost writes under a production build while public hosts still require a configured salt', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('AIROS_RATE_LIMIT_SALT', '')
+    await expect(enforceAirosRateLimit(new Request('https://hacktheheart.vercel.app/api/airos/imports/preview'), 'preview'))
+      .rejects.toMatchObject({ message: 'Anonymous write rate limiting is not configured.', status: 503 })
+    await expect(enforceAirosRateLimit(new Request('http://localhost:3002/api/airos/imports/preview'), 'preview')).resolves.toBeUndefined()
+    vi.unstubAllEnvs()
+  })
+
   it('serves a stable cached social photo through the local profile endpoint', async () => {
     const profile = await getPublicProfile(badgeId)
     expect(profile?.avatarUrl).toBe(`/api/airos/profiles/${badgeId}/photo`)

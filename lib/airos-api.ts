@@ -39,8 +39,10 @@ function configuredLimit(kind: 'preview' | 'import' | 'analyze') {
 }
 
 export async function enforceAirosRateLimit(request: Request, kind: 'preview' | 'import' | 'analyze') {
+  const hostname = new URL(request.url).hostname
+  const isLocalRequest = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
   const salt = process.env.AIROS_RATE_LIMIT_SALT
-    || (process.env.NODE_ENV === 'production' ? null : 'airos-development-only-salt')
+    || (process.env.NODE_ENV !== 'production' || isLocalRequest ? 'airos-development-only-salt' : null)
   if (!salt) throw new AirosHttpError('Anonymous write rate limiting is not configured.', 503)
   const addressHash = createHash('sha256').update(`${salt}:${clientAddress(request)}`).digest('hex')
   const now = Date.now()
