@@ -167,7 +167,7 @@ export async function listLabProfiles(slot?: PersonaSlot): Promise<LabProfile[]>
       role: typeof profile.role === 'string' && !/^\d+$/.test(profile.role) ? profile.role : null,
       avatarUrl: typeof profile.badgeId === 'string' && usersWithPhotos.has(profile.userId) ? `/api/airos/profiles/${encodeURIComponent(profile.badgeId)}/photo` : null,
       source: 'badge_import',
-      prefilled: !manual,
+      prefilled: !manual && Boolean(stored.bio || stored.traits.length || stored.interests.length || stored.style),
     })
     seenUserIds.add(profile.userId)
   }

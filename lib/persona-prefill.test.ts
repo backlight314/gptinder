@@ -2,6 +2,16 @@ import { describe, expect, it } from 'vitest'
 import { buildPersonaPrefill } from './persona-prefill'
 
 describe('buildPersonaPrefill', () => {
+  it('leaves unsupported fields empty instead of inventing a generic persona', () => {
+    expect(buildPersonaPrefill({ userId: 'usr-blank', name: 'Stored Contact' })).toMatchObject({
+      name: 'Stored Contact',
+      bio: '',
+      traits: [],
+      interests: [],
+      style: '',
+    })
+  })
+
   it('derives conservative fields from reviewed profile text and public posts', () => {
     const persona = buildPersonaPrefill({
       userId: 'usr-1',
