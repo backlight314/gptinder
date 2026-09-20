@@ -158,9 +158,9 @@ measure or real-world promise.
 
 `app/api/match/conversation/route.ts` implements this loop.
 
-1. The UI sends two persona snapshots and a turn count (six by default).
-2. The API accepts between two and six turns; the product uses six total
-   messages, three from each agent.
+1. The UI sends two persona snapshots and a turn count (ten by default).
+2. The API accepts between two and ten turns; the product uses ten total
+   messages, five from each agent.
 3. Before every turn, the API loads the current speaker's recent imported
    posts from MongoDB as a bounded voice-and-pacing reference. If configured,
    it also semantically searches that speaker's Vector Store.
