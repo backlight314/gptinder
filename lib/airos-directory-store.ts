@@ -2,6 +2,7 @@ import 'server-only'
 
 import { createHash, randomUUID } from 'node:crypto'
 import { cache } from 'react'
+import { profilePhoto } from '@/lib/profile-photo'
 import { MongoServerError } from 'mongodb'
 import { getMongoDatabase } from '@/lib/mongodb'
 import {
@@ -64,6 +65,8 @@ export type AirosAnalysisDocument = {
 }
 
 export type PublicProfile = {
+  avatarUrl: string | null
+  avatarAlternatives: string[]
   badgeId: string
   name: string
   email: string | null
@@ -310,7 +313,19 @@ export const getPublicProfile = cache(async (badgeIdValue: string): Promise<Publ
     database.collection<AirosAnalysisDocument>(ANALYSES).findOne({ badgeId, status: 'ready' }),
   ])
   if (!profile) return null
+  const socialProfiles = await Promise.all([
+    ['linkedin_profiles', profile.linkedin], ['x_profiles', profile.x], ['instagram_profiles', profile.instagram],
+  ].map(([name, link]) => {
+    const urls = link ? [link.replace(/\/$/, ''), `${link.replace(/\/$/, '')}/`] : []
+    return database.collection(name!).findOne({ $or: [
+      { userId: profile.userId },
+      ...(urls.length ? [{ sourceUrl: { $in: urls } }, { url: { $in: urls } }, { linkedinUrl: { $in: urls } }] : []),
+    ] }, { projection: { avatarUrl: 1, profilePicUrlHD: 1, profilePicUrl: 1, profilePicture: 1, photo: 1, profile_image_url_https: 1, profile_image_url: 1 } })
+  }))
+  const photoUrls = socialProfiles.map(profilePhoto).filter((url): url is string => Boolean(url))
   return {
+    avatarUrl: photoUrls[0] || null,
+    avatarAlternatives: photoUrls.slice(1),
     badgeId: profile.badgeId,
     name: profile.name,
     email: profile.email || null,
