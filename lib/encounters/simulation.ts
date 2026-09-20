@@ -99,6 +99,7 @@ export async function runConversationTurn(encounterId: string, sequence: number)
     throw new Error('Speaker referenced an interpretation signal that does not exist')
   await saveMessage({
     encounterId, sequence, speakerUserId: profile.userId, speakerKey, reactionId,
+    voicePromptId: '',
     agentContextRevision: accountContext.revision,
     action: output.action, text: output.text, profileEvidenceIds: output.usedProfileEvidence,
     reactionEvidenceIds: output.usedInterpretationSignals, lensUsage: output.lensUsage, model: agentModel(speakerKey, 'speaker'),
