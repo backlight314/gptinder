@@ -62,3 +62,29 @@ it('uses another account profile without attempting an unauthorized write', asyn
   fireEvent.click(screen.getByRole('button', { name: /use selected profile and continue/i }))
   expect(fetchMock.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === 'POST')).toBe(false)
 })
+
+it('allows Person One to author a blank stored profile as a new persona draft', async () => {
+  const blankProfile = { ...storedProfile, name: 'Blank Contact', bio: '', traits: [], interests: [], style: '', prefilled: false, owned: false }
+  const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    if (init?.method === 'POST') return Promise.resolve(new Response(JSON.stringify({ userId: 'usr_new_persona' }), { status: 200 }))
+    return Promise.resolve(new Response(JSON.stringify({ profiles: [blankProfile] }), { status: 200 }))
+  })
+  vi.stubGlobal('fetch', fetchMock)
+
+  render(<AIMatchmaker />)
+  fireEvent.click(screen.getByRole('button', { name: /create the first profile/i }))
+  expect(await screen.findByText('Blank Contact')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: /blank contact.*use this profile/i }))
+
+  expect(screen.getByLabelText('Name')).not.toBeDisabled()
+  fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'My authored profile' } })
+  fireEvent.change(screen.getByLabelText(/Bio/), { target: { value: 'A factual bio.' } })
+  fireEvent.change(screen.getByLabelText(/Traits/), { target: { value: 'curious' } })
+  fireEvent.change(screen.getByLabelText(/Interests/), { target: { value: 'design' } })
+  fireEvent.change(screen.getByLabelText(/Conversation style/), { target: { value: 'Concise and direct.' } })
+  fireEvent.click(screen.getByRole('button', { name: /save selected profile and continue/i }))
+
+  const postCall = fetchMock.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === 'POST')
+  expect(postCall).toBeDefined()
+  expect(JSON.parse(String((postCall?.[1] as RequestInit).body))).not.toHaveProperty('userId')
+})
