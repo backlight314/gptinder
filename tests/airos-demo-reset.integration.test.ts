@@ -57,6 +57,8 @@ describe('AIROS profile photo and demo reset', () => {
     await expect(enforceAirosRateLimit(new Request('https://hacktheheart.vercel.app/api/airos/imports/preview'), 'preview'))
       .rejects.toMatchObject({ message: 'Anonymous write rate limiting is not configured.', status: 503 })
     await expect(enforceAirosRateLimit(new Request('http://localhost:3002/api/airos/imports/preview'), 'preview')).resolves.toBeUndefined()
+    await expect(enforceAirosRateLimit(new Request('http://localhost:3002/api/airos/imports'), 'import')).resolves.toBeUndefined()
+    expect(await database.collection('airos_rate_limits').countDocuments()).toBe(0)
     vi.unstubAllEnvs()
   })
 
