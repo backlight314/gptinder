@@ -43,7 +43,7 @@ export function calculateCompatibility(a: FrozenProfile, b: FrozenProfile): Comp
 }
 
 export function conversationFeatures(a: ScoredVerdict, b: ScoredVerdict): CompatibilityResult['features'] {
-  const dimensions = ['compatibility', 'friction', 'reciprocity', 'pacing', 'connection'] as const
+  const dimensions = ['compatibility', 'friction', 'reciprocity', 'pacing', 'connection', 'sharedGround'] as const
   return dimensions.map(key => ({
     key,
     outcome: a.analysis[key] === b.analysis[key] ? 'aligned' : 'different',
@@ -56,7 +56,7 @@ export function calculateConversationCompatibility(a: CompatibilityVerdict, b: C
   return {
     label: 'Conversation analysis score',
     score: result.compatibilityScore,
-    coverage: 5,
+    coverage: 6,
     features: conversationFeatures(result.verdicts.a, result.verdicts.b),
     meetingIntent: result.meetingIntent,
     verdicts: result.verdicts,

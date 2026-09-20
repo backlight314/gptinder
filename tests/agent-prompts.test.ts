@@ -33,6 +33,33 @@ describe('agent API contracts', () => {
     expect(request.text.format.type).toBe('json_schema')
   })
 
+  it('instructs the speaker to discover shared ground and rejects replies over 80 words', async () => {
+    parse.mockResolvedValueOnce({
+      status: 'completed',
+      output_parsed: {
+        action: 'ask_question',
+        text: Array.from({ length: 81 }, () => 'word').join(' '),
+        usedProfileEvidence: ['usr_test:bio'],
+        usedInterpretationSignals: [],
+        lensUsage: { behavior: [], interpersonal: [], attachmentRegulation: [], values: [] },
+      },
+    })
+
+    await expect(speakAsPersona({
+      profile,
+      accountContext: { revision: 1, compiledPrompt: '## Texting style\nBe natural.' },
+      incomingMessage: null,
+      interpretation: null,
+      history: [],
+      scenario: 'natural',
+    })).rejects.toThrow('80-word limit')
+
+    const request = parse.mock.calls[0][0]
+    expect(request.instructions).toContain('build on shared ground')
+    expect(request.instructions).toContain('brief, kind, direct decline')
+    expect(request.instructions).toContain('under 80 words')
+  })
+
   it('rejects incomplete output even if a partial parse exists', async () => {
     parse.mockResolvedValue({ status: 'incomplete', output_parsed: { compiledPrompt: '## Texting style\nUse lowercase and short messages with natural punctuation.', sourceEvidenceIds: ['personas:usr_test'] } })
     await expect(buildAccountContext({ userId: 'usr_test', rawMongoDocuments: {}, sourceStats: [] })).rejects.toThrow('no structured output')
