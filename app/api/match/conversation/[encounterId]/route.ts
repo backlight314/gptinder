@@ -13,7 +13,7 @@ export async function GET(_request: Request, context: { params: Promise<{ encoun
   const encounter = await database.collection<StringIdDocument>('conversation_encounters').findOne({ _id: encounterId })
   if (!encounter) return Response.json({ error: 'Encounter not found.' }, { status: 404 })
   const messages = await database.collection<StringIdDocument>('agent_messages').find({ encounterId }).sort({ sequence: 1 }).project({
-    _id: 1, sequence: 1, speakerKey: 1, action: 1, text: 1, reactionId: 1, voicePromptId: 1, lensUsage: 1,
+    _id: 1, sequence: 1, speakerKey: 1, action: 1, text: 1, reactionId: 1, agentContextRevision: 1, lensUsage: 1,
   }).toArray()
   const reactions = await database.collection<StringIdDocument>('agent_reactions').find({ encounterId }).sort({ createdAt: 1 }).project({
     _id: 1, inputMessageId: 1, ownerUserId: 1, interpretation: 1, adaptationVersionId: 1,

@@ -4,11 +4,9 @@ import { agentModel } from '@/lib/agents/models'
 import { calculateCompatibility } from '@/lib/psychology/compatibility'
 import { validateProfileEvidence } from '@/lib/psychology/profile'
 import type { PersonKey, SocialInterpretation } from '@/lib/psychology/schemas'
-import { buildVoicePrompt, interpretMessage, speakAsPersona } from '@/lib/agents/openai'
+import { interpretMessage, speakAsPersona } from '@/lib/agents/openai'
 import { interpreterGuidanceText } from '@/lib/learning/adaptation'
-import { validateVoiceEvidence } from '@/lib/voice/profile'
-import { voicePromptBuilderSchema, type VoicePromptBuilderOutput } from '@/lib/voice/schemas'
-import { claimEncounter, loadEncounter, saveMessage, saveReaction, saveVoicePrompt } from './store'
+import { claimEncounter, loadEncounter, saveMessage, saveReaction } from './store'
 
 export { claimEncounter }
 type StringIdDocument = { _id: string; [key: string]: any }
@@ -44,14 +42,14 @@ async function runAgentCall<T>(
 }
 
 export async function runConversationTurn(encounterId: string, sequence: number) {
-  const { database, encounter, profiles, voiceProfiles, adaptations } = await loadEncounter(encounterId)
+  const { database, encounter, profiles, accountContexts, adaptations } = await loadEncounter(encounterId)
   const existing = await database.collection<StringIdDocument>('agent_messages').findOne({ encounterId, sequence })
   if (existing) return
   const historyDocuments = await database.collection<StringIdDocument>('agent_messages').find({ encounterId, sequence: { $lt: sequence } }).sort({ sequence: 1 }).toArray()
   if (historyDocuments.length !== sequence) throw new Error('Earlier messages are missing')
   const speakerKey = keyForSequence(sequence)
   const profile = profiles[speakerKey]
-  const voiceProfile = voiceProfiles[speakerKey]
+  const accountContext = accountContexts[speakerKey]
   const adaptation = adaptations[speakerKey]
   const history = historyDocuments.map(item => ({ id: String(item._id), from: item.speakerKey as string, text: item.text as string }))
   const incoming = historyDocuments.at(-1)
@@ -65,7 +63,7 @@ export async function runConversationTurn(encounterId: string, sequence: number)
     if (storedReaction) interpretation = storedReaction.interpretation as SocialInterpretation
     else {
       interpretation = await runAgentCall(database, encounterId, () => interpretMessage({
-        profile, model: agentModel(speakerKey, 'reaction'),
+        profile, accountContext, model: agentModel(speakerKey, 'reaction'),
         incomingMessage: { id: String(incoming._id), text: incoming.text as string, from: incoming.speakerKey as string },
         history, scenario: encounter.scenario, temporaryState: encounter.temporaryState?.[speakerKey] ?? null,
         adaptationGuidance: interpreterGuidanceText(adaptation),
@@ -85,32 +83,11 @@ export async function runConversationTurn(encounterId: string, sequence: number)
     reactionId ??= String(storedReaction?._id)
   }
 
-  const storedVoicePrompt = await database.collection<StringIdDocument>('agent_voice_prompts').findOne({
-    encounterId, ownerUserId: profile.userId, promptVersion: 'voice-prompt-builder-v1',
-  })
-  const parsedStoredVoicePrompt = voicePromptBuilderSchema.safeParse(storedVoicePrompt?.output)
-  let voicePrompt: VoicePromptBuilderOutput | undefined = parsedStoredVoicePrompt.success
-    ? parsedStoredVoicePrompt.data
-    : undefined
-  let voicePromptId = storedVoicePrompt && parsedStoredVoicePrompt.success ? String(storedVoicePrompt._id) : null
-  if (voicePrompt) validateVoiceEvidence(voiceProfile, voicePrompt.evidenceIds)
-  if (!voicePrompt) {
-    voicePrompt = await runAgentCall(database, encounterId, () => buildVoicePrompt({
-      profile, voiceProfile, scenario: encounter.scenario, model: agentModel(speakerKey, 'voice'),
-    }))
-    validateVoiceEvidence(voiceProfile, voicePrompt.evidenceIds)
-    voicePromptId = await saveVoicePrompt({
-      encounterId, ownerUserId: profile.userId,
-      voiceProfileVersionId: voiceProfile.voiceProfileVersionId, output: voicePrompt, model: agentModel(speakerKey, 'voice'),
-    })
-  }
-  if (!voicePromptId) throw new Error('Voice Prompt Builder output was not persisted')
-
   const output = await runAgentCall(database, encounterId, () => speakAsPersona({
-    profile, model: agentModel(speakerKey, 'speaker'),
+    profile, accountContext, model: agentModel(speakerKey, 'speaker'),
     retrievedContext: encounter.retrievedContext?.[speakerKey] ?? '',
     incomingMessage: incoming ? { id: String(incoming._id), text: incoming.text as string, from: incoming.speakerKey as string } : null,
-    interpretation, history, scenario: encounter.scenario, voicePrompt,
+    interpretation, history, scenario: encounter.scenario,
   }))
   validateProfileEvidence(profile, output.usedProfileEvidence)
   const allowedSignals = new Set(interpretation ? [
@@ -122,7 +99,7 @@ export async function runConversationTurn(encounterId: string, sequence: number)
     throw new Error('Speaker referenced an interpretation signal that does not exist')
   await saveMessage({
     encounterId, sequence, speakerUserId: profile.userId, speakerKey, reactionId,
-    voicePromptId,
+    agentContextRevision: accountContext.revision,
     action: output.action, text: output.text, profileEvidenceIds: output.usedProfileEvidence,
     reactionEvidenceIds: output.usedInterpretationSignals, lensUsage: output.lensUsage, model: agentModel(speakerKey, 'speaker'),
   })

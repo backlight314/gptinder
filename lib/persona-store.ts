@@ -2,6 +2,7 @@ import 'server-only'
 
 import { createHash } from 'node:crypto'
 import { getMongoDatabase } from '@/lib/mongodb'
+import { agentContextView, ensureMinimalAgentContext, initializeNewAgentContext } from '@/lib/agent-contexts/store'
 import type { ManualPersona as PsychologyPersona } from '@/lib/psychology/schemas'
 
 export type PersonaSlot = 'a' | 'b'
@@ -43,7 +44,7 @@ export async function storePersona(
   const userId = requestedUserId || personalizedUserId(persona.name, slot)
   const personas = database.collection('personas')
 
-  await database.collection<UserDocument>('users').updateOne(
+  const userWrite = await database.collection<UserDocument>('users').updateOne(
     { _id: userId },
     {
       $set: { displayName: persona.name, updatedAt: now },
@@ -51,6 +52,7 @@ export async function storePersona(
     },
     { upsert: true },
   )
+  let agentContext = await ensureMinimalAgentContext(userId, database)
 
   const stored = await personas.findOneAndUpdate(
     { userId, slot },
@@ -64,11 +66,15 @@ export async function storePersona(
 
   if (!stored) throw new Error('MongoDB did not return the stored persona')
 
+  if (userWrite.upsertedCount === 1) agentContext = await initializeNewAgentContext(userId, database)
+
   return {
     personaId: String(stored._id),
     userId,
     slot,
     revision: typeof stored.revision === 'number' ? stored.revision : 1,
     persona,
+    agentContext: agentContextView(agentContext),
+    userCreated: userWrite.upsertedCount === 1,
   }
 }

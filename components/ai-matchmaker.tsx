@@ -25,13 +25,23 @@ type ImportResponse = {
   storedProfileCount?: number
   storedPostCount?: number
   storedCommentCount?: number
+  agentContext?: AgentContextView
   error?: string
 }
 type PersonaSaveResponse = {
   userId?: string
   personaId?: string
   revision?: number
+  agentContext?: AgentContextView
   error?: string
+}
+type AgentContextView = {
+  revision: number
+  compiledPrompt: string
+  sourceEvidenceIds: string[]
+  sourceStats: Array<{ source: string; documentsRead: number; documentsIncluded: number; charactersIncluded: number; truncated: boolean }>
+  builtAt: string
+  updatedAt: string
 }
 type SocialLinks = { linkedin: string; instagram: string; x: string }
 type Step = 'landing' | 'profile-a' | 'profile-b' | 'date' | 'log'
@@ -71,6 +81,10 @@ function ProfilePreview({ persona, user }: { persona: Persona; user: PersonKey }
   return <aside className="rounded-3xl border border-primary/20 bg-primary/5 p-5 sm:p-6"><p className="text-xs font-semibold uppercase tracking-[.18em] text-primary">Stored agent snapshot</p><div className="mt-4 flex items-center gap-3"><Avatar person={persona} size="md" /><div><p className="font-semibold">{persona.name || `Person ${user === 'a' ? 'one' : 'two'}`}</p><p className="text-xs text-muted-foreground">Saved to MongoDB when you confirm this form.</p></div></div><dl className="mt-5 space-y-4 text-sm"><div><dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Bio</dt><dd className="mt-1 leading-relaxed">{persona.bio || 'Add a concise description.'}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Traits</dt><dd className="mt-2 flex flex-wrap gap-2">{persona.traits.length ? persona.traits.map(item => <span key={item} className="rounded-full bg-card px-2.5 py-1 text-xs font-medium">{item}</span>) : 'Add traits.'}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Interests</dt><dd className="mt-2 flex flex-wrap gap-2">{persona.interests.length ? persona.interests.map(item => <span key={item} className="rounded-full bg-card px-2.5 py-1 text-xs font-medium">{item}</span>) : 'Add interests.'}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Conversation style</dt><dd className="mt-1 leading-relaxed">{persona.style || 'Describe their voice and pacing.'}</dd></div></dl></aside>
 }
 
+function AgentContextPanel({ context, rebuilding, error, onRebuild }: { context: AgentContextView; rebuilding: boolean; error: string; onRebuild: () => void }) {
+  return <section className="mb-7 rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">Agent prompt</p><h2 className="mt-1 font-semibold">Context revision {context.revision}</h2><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Built {new Date(context.builtAt).toLocaleString()}. Profile and import edits are included only when you rebuild.</p></div><Button variant="secondary" onClick={onRebuild} disabled={rebuilding}>{rebuilding ? 'Rebuilding…' : 'Rebuild my agent prompt'} <RefreshCw size={15} /></Button></div><div className="mt-4 grid gap-2 sm:grid-cols-2">{context.sourceStats.map(stat => <div className="rounded-xl border border-border bg-card/80 p-3 text-xs" key={stat.source}><div className="flex items-center justify-between gap-2"><span className="font-semibold">{stat.source.replace(/([A-Z])/g, ' $1')}</span>{stat.truncated && <span className="text-muted-foreground">shortened</span>}</div><p className="mt-1 text-muted-foreground">{stat.documentsIncluded} included of {stat.documentsRead} read · {stat.charactersIncluded} characters</p></div>)}</div><details className="mt-4"><summary className="cursor-pointer text-xs font-semibold">Preview compiled prompt</summary><pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-xl border border-border bg-background p-3 text-xs leading-relaxed text-muted-foreground">{context.compiledPrompt}</pre></details>{error && <p role="alert" className="mt-3 rounded-xl bg-destructive/10 p-3 text-xs text-destructive">{error}</p>}</section>
+}
+
 function Profile({ user, initial, initialUserId, next, onUserId, back }: { user: PersonKey; initial: Persona; initialUserId?: string; next: (persona: Persona, userId: string) => void; onUserId: (userId: string) => void; back: () => void }) {
   const [persona, setPersona] = useState(initial)
   const [links, setLinks] = useState<SocialLinks>({ linkedin: '', instagram: '', x: '' })
@@ -80,6 +94,9 @@ function Profile({ user, initial, initialUserId, next, onUserId, back }: { user:
   const [importStatus, setImportStatus] = useState('')
   const [saveError, setSaveError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [agentContext, setAgentContext] = useState<AgentContextView | null>(null)
+  const [rebuildingContext, setRebuildingContext] = useState(false)
+  const [contextError, setContextError] = useState('')
   const [userId, setUserId] = useState<string | undefined>(initialUserId)
   const isValid = Boolean(persona.name.trim() && persona.bio.trim() && persona.style.trim() && persona.traits.length && persona.interests.length && persona.values.length)
   const urls = Object.values(links).map((value) => value.trim()).filter(Boolean)
@@ -103,6 +120,7 @@ function Profile({ user, initial, initialUserId, next, onUserId, back }: { user:
       }
       setUserId(data.userId)
       onUserId(data.userId)
+      if (data.agentContext) setAgentContext(data.agentContext)
       setImportStatus(`Stored ${data.storedProfileCount ?? urls.length} profiles, ${data.storedPostCount ?? 0} posts, and ${data.storedCommentCount ?? 0} comments under ${data.userId}. Re-importing updates these records without duplicates.`)
     } catch (reason) {
       setImportError(reason instanceof Error ? reason.message : 'Unable to import these social profiles.')
@@ -124,11 +142,27 @@ function Profile({ user, initial, initialUserId, next, onUserId, back }: { user:
       if (!response.ok || !data.userId) throw new Error(data.error ?? 'Unable to save this persona.')
       setUserId(data.userId)
       onUserId(data.userId)
+      if (data.agentContext) setAgentContext(data.agentContext)
       next(persona, data.userId)
     } catch (reason) {
       setSaveError(reason instanceof Error ? reason.message : 'Unable to save this persona.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const rebuildAgentContext = async () => {
+    setRebuildingContext(true)
+    setContextError('')
+    try {
+      const response = await fetch('/api/agent-contexts/rebuild', { method: 'POST' })
+      const data = await response.json().catch(() => ({})) as { agentContext?: AgentContextView; error?: string }
+      if (!response.ok || !data.agentContext) throw new Error(data.error ?? 'Unable to rebuild the agent prompt.')
+      setAgentContext(data.agentContext)
+    } catch (reason) {
+      setContextError(reason instanceof Error ? reason.message : 'Unable to rebuild the agent prompt.')
+    } finally {
+      setRebuildingContext(false)
     }
   }
 
@@ -177,6 +211,7 @@ function Profile({ user, initial, initialUserId, next, onUserId, back }: { user:
               {importStatus && <p role="status" className="mt-4 rounded-xl bg-emerald-500/10 p-3 text-xs leading-relaxed text-emerald-700 dark:text-emerald-300">{importStatus}</p>}
               {importError && <p role="alert" className="mt-4 rounded-xl bg-destructive/10 p-3 text-xs leading-relaxed text-destructive">{importError}</p>}
             </section>
+            {agentContext && <AgentContextPanel context={agentContext} rebuilding={rebuildingContext} error={contextError} onRebuild={() => { void rebuildAgentContext() }} />}
             <div className="grid gap-5">
               <label htmlFor={`name-${user}`}><span className="text-sm font-semibold">Name</span><input id={`name-${user}`} required maxLength={80} value={persona.name} onChange={event => change('name', event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none ring-primary focus:ring-2" /></label>
               <label htmlFor={`bio-${user}`}><span className="text-sm font-semibold">Bio</span><span className="mt-1 block text-xs text-muted-foreground">A short, factual self-description.</span><textarea id={`bio-${user}`} required maxLength={600} rows={4} value={persona.bio} onChange={event => change('bio', event.target.value)} className="mt-2 w-full resize-y rounded-xl border border-border bg-background p-3 text-sm outline-none ring-primary focus:ring-2" /></label>
@@ -205,7 +240,7 @@ function Profile({ user, initial, initialUserId, next, onUserId, back }: { user:
   )
 }
 
-type AgentMessage = { _id: string; sequence: number; speakerKey: PersonKey; action: string; text: string; voicePromptId?: string }
+type AgentMessage = { _id: string; sequence: number; speakerKey: PersonKey; action: string; text: string; agentContextRevision?: number; voicePromptId?: string }
 type Interpretation = {
   literalMeaning: string
   possibleIntent: string

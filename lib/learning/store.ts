@@ -3,6 +3,7 @@ import 'server-only'
 import { getMongoDatabase } from '@/lib/agents/database'
 import type { EncounterParticipant } from '@/lib/encounters/store'
 import type { FrozenProfile, PersonKey } from '@/lib/psychology/schemas'
+import type { AgentContextSnapshot } from '@/lib/agent-contexts/schemas'
 import { storedAdaptationSchema, type DateOutcome, type StoredAdaptation } from './schemas'
 
 type StringIdDocument = { _id: string; [key: string]: any }
@@ -75,10 +76,16 @@ export async function loadFeedbackContext(encounterId: string) {
     void createdAt
     return [participant.key, data as FrozenProfile]
   })) as Record<PersonKey, FrozenProfile>
+  const accountContexts = encounter.accountContexts as Record<PersonKey, AgentContextSnapshot> | undefined
+  for (const key of ['a', 'b'] as const) {
+    const context = accountContexts?.[key]
+    if (!context || !Number.isInteger(context.revision) || context.revision < 0 || typeof context.compiledPrompt !== 'string' || !context.compiledPrompt.trim())
+      throw new Error(`Frozen agent context missing for participant ${key}`)
+  }
   return {
     participants,
     outcome: feedback.outcome as DateOutcome,
-    messages, reactions, profiles,
+    messages, reactions, profiles, accountContexts: accountContexts as Record<PersonKey, AgentContextSnapshot>,
   }
 }
 

@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
-    "migrate:social-schema": "node --env-file=.env.local scripts/migrate-social-schema.mjs"
+    "migrate:social-schema": "node --env-file=.env.local scripts/migrate-social-schema.mjs",
+    "migrate:agent-contexts": "node --env-file=.env.local scripts/migrate-agent-contexts.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
