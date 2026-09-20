@@ -42,9 +42,9 @@ export async function getMongoDatabase(): Promise<Db> {
         { userId: 1, slot: 1 },
         { unique: true, name: 'persona_user_slot_unique' },
       ),
-      database.collection('agent_contexts').createIndex(
+      database.collection('persona_prefills').createIndex(
         { userId: 1 },
-        { unique: true, name: 'agent_context_user_unique' },
+        { unique: true, name: 'persona_prefill_user_unique' },
       ),
       ...(['linkedin_profiles', 'instagram_profiles', 'x_profiles'] as const).map((name) =>
         database.collection(name).createIndex(
@@ -77,14 +77,6 @@ export async function getMongoDatabase(): Promise<Db> {
       database.collection('social_comments').createIndex(
         { postId: 1, publishedAt: 1 },
         { name: 'post_comments_ordered' },
-      ),
-      database.collection('social_comments').createIndex(
-        { userId: 1, authorUserId: 1, publishedAt: -1 },
-        { name: 'user_authored_comments_recent' },
-      ),
-      database.collection('social_profile_sections').createIndex(
-        { userId: 1, platform: 1, externalId: 1 },
-        { unique: true, name: 'profile_section_user_platform_external_unique' },
       ),
       database.collection('airos_profiles').createIndex(
         { badgeId: 1 },
