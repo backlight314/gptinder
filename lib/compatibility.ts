@@ -1,20 +1,8 @@
+import type { CompatibilityAnalysis, CompatibilityVerdict } from '@/lib/psychology/schemas'
+
 export type MeetingIntent = 'agreed' | 'interested' | 'declined' | 'unclear'
 export type ConversationScenario = 'natural' | 'friction'
-export type CompatibilityAnalysis = {
-  compatibility: 'strong' | 'mixed' | 'weak'
-  friction: 'none' | 'low' | 'moderate' | 'high'
-  reciprocity: 'strong' | 'mixed' | 'weak'
-  pacing: 'aligned' | 'mixed' | 'mismatched'
-  connection: 'present' | 'uncertain' | 'absent'
-  rationale: string
-}
-export type CompatibilityVerdict = {
-  summary: string
-  strengths: string[]
-  considerations: string[]
-  analysis: CompatibilityAnalysis
-  meetingIntent: MeetingIntent
-}
+export type { CompatibilityAnalysis, CompatibilityVerdict }
 
 export const CONVERSATION_TURNS = 6
 

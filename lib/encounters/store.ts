@@ -9,8 +9,9 @@ import { adaptationByVersionId, latestAdaptation } from '@/lib/learning/store'
 import type { StoredAdaptation } from '@/lib/learning/schemas'
 import { snapshotRequiredAgentContext } from '@/lib/agent-contexts/store'
 import type { AgentContextSnapshot } from '@/lib/agent-contexts/schemas'
+import type { ConversationScenario } from '@/lib/compatibility'
 
-export const DEFAULT_SCENARIO = 'Plan a first Saturday afternoon date while discussing the activity, social setting, communication style, and advance planning.'
+export const DEFAULT_SCENARIO: ConversationScenario = 'natural'
 
 export type EncounterParticipant = {
   key: PersonKey
@@ -25,6 +26,7 @@ type StringIdDocument = { _id: string; [key: string]: any }
 export async function createEncounter(input: {
   participants: Record<PersonKey, { userId: string }>
   turns: number
+  scenario?: ConversationScenario
 }) {
   const database = await getMongoDatabase()
   const encounterId = `enc_${randomUUID()}`
@@ -62,7 +64,7 @@ export async function createEncounter(input: {
     agentContextRevision: accountContexts[index === 0 ? 'a' : 'b'].revision,
   }))
   await database.collection<StringIdDocument>('conversation_encounters').insertOne({
-    _id: encounterId, status: 'pending_start', scenario: DEFAULT_SCENARIO,
+    _id: encounterId, status: 'pending_start', scenario: input.scenario ?? DEFAULT_SCENARIO,
     turns: input.turns, participants, accountContexts, retrievedContext, temporaryState: { a: null, b: null }, createdAt: new Date(),
   })
   return encounterId
