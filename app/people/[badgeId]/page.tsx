@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { ArrowLeft, ContactRound, Sparkles, Users } from 'lucide-react'
+import { ArrowLeft, ArrowUpRight, ContactRound, Sparkles, Users } from 'lucide-react'
 import SiteNav from '@/components/site-nav'
 import ProfileAvatar from '@/components/profile-avatar'
 import { notFound } from 'next/navigation'
@@ -21,7 +21,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 function ContactLink({ label, value, href }: { label: string; value: string | null; href?: string }) {
   if (!value) return null
-  return <div className="contact-row"><p>{label}</p>{href ? <a href={href} target="_blank" rel="noreferrer">{value.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')} ↗</a> : <p>{value}</p>}</div>
+  return <div className="contact-row"><p>{label}</p>{href ? <a href={href} target="_blank" rel="noreferrer"><span>{value.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')}</span><span className="contact-arrow" aria-hidden="true"><ArrowUpRight size={13} strokeWidth={2} /></span></a> : <p>{value}</p>}</div>
 }
 
 export default async function PersonPage({ params }: Props) {
@@ -37,7 +37,7 @@ export default async function PersonPage({ params }: Props) {
       <div className="profile-heading-body">
         <div className="profile-identity"><ProfileAvatar key={profile.avatarUrl} name={profile.name} src={profile.avatarUrl} alternatives={profile.avatarAlternatives} large /><span className="badge-label"><span className="live-dot" /> Badge imported</span></div>
         <h1>{profile.name}</h1><p className="person-role">{profile.role && !/^\d+$/.test(profile.role) ? profile.role : 'Hack the North participant'}</p><p className="badge-id">{profile.badgeId}</p>
-        <div className="profile-stats"><span><strong>{profile.connectionCount}</strong> connections</span><span><strong>{profile.observationCount}</strong> encounters recorded</span></div>
+        <div className="profile-stats"><span><strong>{profile.connectionCount}</strong> {profile.connectionCount === 1 ? 'connection' : 'connections'}</span><span><strong>{profile.observationCount}</strong> {profile.observationCount === 1 ? 'encounter' : 'encounters'} recorded</span></div>
       </div>
     </header>
     <div className="profile-columns">

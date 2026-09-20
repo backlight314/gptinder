@@ -12,3 +12,34 @@ export function profilePhoto(record: Record<string, unknown> | null): string | n
   }
   return null
 }
+
+export const SAFE_PROFILE_IMAGE_TYPES = new Set([
+  'image/avif',
+  'image/gif',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+])
+
+export function profileInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (!parts.length) return '?'
+  return `${parts[0]?.[0] || ''}${parts.length > 1 ? parts.at(-1)?.[0] || '' : ''}`.toUpperCase()
+}
+
+export function safeProviderPhotoUrl(value: string, platform: 'linkedin' | 'instagram' | 'x'): string | null {
+  try {
+    const url = new URL(value)
+    if (url.protocol !== 'https:' || url.username || url.password) return null
+    const hostname = url.hostname.toLowerCase()
+    const allowed = platform === 'linkedin'
+      ? hostname === 'licdn.com' || hostname.endsWith('.licdn.com')
+      : platform === 'x'
+        ? hostname === 'twimg.com' || hostname.endsWith('.twimg.com')
+        : hostname === 'cdninstagram.com' || hostname.endsWith('.cdninstagram.com')
+          || hostname === 'fbcdn.net' || hostname.endsWith('.fbcdn.net')
+    return allowed ? url.href : null
+  } catch {
+    return null
+  }
+}
