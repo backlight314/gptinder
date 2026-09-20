@@ -138,7 +138,7 @@ async function createResponse({ apiKey, model, instructions, input, maxOutputTok
       store: false,
       instructions,
       input,
-      reasoning: { effort: 'minimal' },
+      reasoning: { effort: 'low' },
       max_output_tokens: maxOutputTokens,
       ...(format ? { text: { format } } : {}),
     }),
