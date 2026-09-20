@@ -281,7 +281,7 @@ function Profile({ user, initial, initialUserId, next, onUserId, back }: { user:
             <div className="mt-8 flex justify-end"><Button type="submit" disabled={!canSave}>{saving ? 'Saving persona…' : mode === 'stored' ? 'Save selected profile and continue' : 'Save persona and continue'} <ArrowRight size={17} /></Button></div>
             </div>
           </form>
-          <div className="lg:col-start-1">
+          <div className="lg:col-start-2">
             <ProfilePreview persona={persona} user={user} />
           </div>
         </div>
