@@ -25,7 +25,7 @@ type SerialNavigator = Navigator & {
 
 type PreviewResponse = { ownerBadgeId: string; records: PreviewRecord[]; error?: string }
 
-const COMMAND_TIMEOUT_MS = 6_000
+const COMMAND_TIMEOUT_MS = 10_000
 const MAX_COMMAND_OUTPUT = 128 * 1024
 
 export class BadgeConsole {
@@ -71,6 +71,12 @@ export class BadgeConsole {
     this.buffer = ''
   }
 
+  async wake() {
+    this.buffer = ''
+    await this.writer.write(this.encoder.encode('\r'))
+    await this.drain()
+  }
+
   private async once(command: string) {
     this.buffer = ''
     await this.writer.write(this.encoder.encode(`${command}\r`))
@@ -80,8 +86,8 @@ export class BadgeConsole {
       if (this.buffer.length > MAX_COMMAND_OUTPUT) throw new Error('The badge returned more data than the importer accepts.')
       const normalized = this.buffer.replace(/\r\n?/g, '\n')
       const echoIndex = normalized.indexOf(command)
-      const promptIndex = normalized.indexOf('badge>', Math.max(0, echoIndex + command.length))
-      if (echoIndex >= 0 && promptIndex >= 0) return normalized.slice(echoIndex + command.length, promptIndex)
+      const promptIndex = normalized.indexOf('badge>', echoIndex >= 0 ? echoIndex + command.length : 0)
+      if (promptIndex >= 0) return normalized.slice(echoIndex >= 0 ? echoIndex + command.length : 0, promptIndex)
       await new Promise((resolve) => setTimeout(resolve, 25))
     }
     throw new Error(`The badge did not finish “${command}” in time.`)
@@ -122,7 +128,7 @@ async function responseJson<T>(response: Response) {
 }
 
 export default function BadgeImporter() {
-  const [phase, setPhase] = useState<'idle' | 'reading' | 'previewing' | 'ready' | 'importing' | 'done'>('idle')
+  const [phase, setPhase] = useState<'idle' | 'choosing' | 'reading' | 'previewing' | 'ready' | 'importing' | 'done'>('idle')
   const [message, setMessage] = useState('Connect an official Hack the North badge with a USB data cable.')
   const [batch, setBatch] = useState<BadgeImportBatch | null>(null)
   const [records, setRecords] = useState<PreviewRecord[]>([])
@@ -139,8 +145,8 @@ export default function BadgeImporter() {
       setMessage('Web Serial is not available here. Use desktop Chrome, Brave, or Edge over HTTPS.')
       return
     }
-    setPhase('reading')
-    setMessage('Choose the Espressif badge port. Hack the Heart will only read identity and contact files.')
+    setPhase('choosing')
+    setMessage('Choose the newly connected Espressif badge in the browser’s port window.')
     setBatch(null)
     setRecords([])
     setInvalid([])
@@ -151,10 +157,12 @@ export default function BadgeImporter() {
       port = await (navigator as SerialNavigator).serial!.requestPort({
         filters: [{ usbVendorId: 0x303a, usbProductId: 0x1001 }],
       })
+      setPhase('reading')
+      setMessage('Opening the badge console and reading its identity…')
       await port.open({ baudRate: 115200 })
       if (!port.readable || !port.writable) throw new Error('The selected port is not readable and writable. Check that the cable supports data.')
       consoleSession = new BadgeConsole(port.readable, port.writable)
-      await consoleSession.drain()
+      await consoleSession.wake()
       const identityOutput = await consoleSession.command('cat /littlefs/identity.json')
       const listingOutput = await consoleSession.command('ls /littlefs/config/contacts')
       const files = parseContactListing(listingOutput)
@@ -221,8 +229,8 @@ export default function BadgeImporter() {
       </section>
       <section className="mt-10 rounded-3xl border bg-card p-6 shadow-sm sm:p-8">
         <div className="flex flex-wrap items-center gap-4">
-          <button type="button" onClick={connectAndPreview} disabled={phase === 'reading' || phase === 'previewing' || phase === 'importing'} className="rounded-full bg-primary px-6 py-3 font-bold text-primary-foreground disabled:opacity-50">
-            {phase === 'reading' ? 'Reading badge…' : 'Connect badge'}
+          <button type="button" onClick={connectAndPreview} disabled={phase === 'choosing' || phase === 'reading' || phase === 'previewing' || phase === 'importing'} className="rounded-full bg-primary px-6 py-3 font-bold text-primary-foreground disabled:opacity-50">
+            {phase === 'choosing' ? 'Choose badge…' : phase === 'reading' ? 'Reading badge…' : phase === 'done' ? 'Connect another badge' : 'Connect badge'}
           </button>
           {phase === 'ready' && <button type="button" onClick={importAll} className="rounded-full border border-primary px-6 py-3 font-bold text-primary">Import all</button>}
           <p aria-live="polite" className="min-w-0 flex-1 text-sm text-muted-foreground">{message}</p>

@@ -46,4 +46,28 @@ describe('BadgeConsole', () => {
     expect(readable.locked).toBe(false)
     expect(writable.locked).toBe(false)
   })
+
+  it('accepts a badge response that does not echo the command', async () => {
+    let controller: ReadableStreamDefaultController<Uint8Array>
+    const encoder = new TextEncoder()
+    const readable = new ReadableStream<Uint8Array>({ start(value) { controller = value } })
+    const writable = new WritableStream<Uint8Array>({
+      write() {
+        controller.enqueue(encoder.encode('{"badge_id":"quiet-badge-test-star"}\r\nbadge>'))
+      },
+    })
+    const session = new BadgeConsole(readable, writable, 100)
+    await expect(session.command('cat /littlefs/identity.json')).resolves.toContain('quiet-badge-test-star')
+    await session.close()
+  })
+
+  it('wakes a newly connected badge with a blank line before reading commands', async () => {
+    let written = ''
+    const readable = new ReadableStream<Uint8Array>()
+    const writable = new WritableStream<Uint8Array>({ write(value) { written += new TextDecoder().decode(value) } })
+    const session = new BadgeConsole(readable, writable, 20)
+    await session.wake()
+    expect(written).toBe('\r')
+    await session.close()
+  })
 })
