@@ -2,12 +2,14 @@ import 'server-only'
 
 import { createHash } from 'node:crypto'
 import { SocialImportError } from '@/lib/social-errors'
+import { SAFE_PROFILE_IMAGE_TYPES } from '@/lib/profile-photo'
 import type {
   NormalizedProfileSection,
   NormalizedSocialComment,
   NormalizedSocialPost,
   NormalizedSocialProfile,
   ProfileImageAsset,
+  SocialProfilePhoto,
   SocialImportPayload,
 } from '@/lib/social-types'
 
@@ -299,12 +301,60 @@ async function downloadImage(url: string | null): Promise<ProfileImageAsset | nu
     if (!response.ok) return null
     const contentType = response.headers.get('content-type') || ''
     const declaredSize = Number(response.headers.get('content-length') || '0')
-    if (!contentType.startsWith('image/') || declaredSize > 5_000_000) return null
+    const normalizedType = contentType.split(';', 1)[0]?.trim().toLowerCase() || ''
+    if (!SAFE_PROFILE_IMAGE_TYPES.has(normalizedType) || declaredSize > 5_000_000) return null
     const bytes = new Uint8Array(await response.arrayBuffer())
-    return bytes.length > 0 && bytes.length <= 5_000_000 ? { sourceUrl: url, contentType, bytes } : null
+    return bytes.length > 0 && bytes.length <= 5_000_000 ? { sourceUrl: url, contentType: normalizedType, bytes } : null
   } catch {
     return null
   }
+}
+
+export async function extractProfilePhotoWithApify(
+  platform: 'linkedin' | 'instagram' | 'x',
+  requestedHandle: string,
+  sourceUrl: string,
+): Promise<SocialProfilePhoto> {
+  let rawProfile: JsonRecord
+  let avatarUrl: string | null
+
+  if (platform === 'linkedin') {
+    const result = await runActorWithItems(PROFILE_ACTOR, {
+      profileScraperMode: 'Profile details no email ($4 per 1k)',
+      queries: [sourceUrl],
+    })
+    rawProfile = result.items[0] || {}
+    avatarUrl = imageUrl(rawProfile.profilePicture) || imageUrl(rawProfile.photo)
+  } else if (platform === 'instagram') {
+    const result = await runActorWithItems(INSTAGRAM_PROFILE_ACTOR, {
+      usernames: [requestedHandle],
+      includeAboutSection: false,
+    })
+    rawProfile = result.items[0] || {}
+    if (rawProfile.error) throw new SocialImportError(`Instagram import failed: ${String(rawProfile.error)}`, 422)
+    avatarUrl = firstText(rawProfile.profilePicUrlHD, rawProfile.profilePicUrl, rawProfile.profilePicture)
+  } else {
+    const result = await runActorWithItems(X_ACTOR, {
+      usernames: [requestedHandle],
+      tweetsPerUser: 1,
+      includeReplies: false,
+      includeRetweets: false,
+      includeProfileOnlyItems: true,
+      maxIPRotations: 5,
+    })
+    const firstItem = result.items.find((item) => Object.keys(record(item.author)).length > 0)
+    rawProfile = record(firstItem?.author)
+    avatarUrl = text(rawProfile.profile_image_url)
+  }
+
+  if (!Object.keys(rawProfile).length) {
+    throw new SocialImportError(`Apify returned no public ${platform} profile data for that handle.`, 422)
+  }
+  const profileImage = await downloadImage(avatarUrl)
+  if (!avatarUrl || !profileImage) {
+    throw new SocialImportError(`No usable public ${platform} profile photo was available.`, 422)
+  }
+  return { platform, handle: requestedHandle, sourceUrl, avatarUrl, profileImage, profileSourceData: rawProfile }
 }
 
 export async function extractLinkedInWithApify(

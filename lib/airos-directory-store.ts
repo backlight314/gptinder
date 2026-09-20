@@ -44,6 +44,8 @@ export type AirosProfileDocument = {
   lastImportedAt: Date
   createdAt: Date
   updatedAt: Date
+  photoRefreshAttemptedAt?: Date
+  photoRefreshError?: string | null
 }
 
 export type AirosAnalysisDocument = {
@@ -79,6 +81,10 @@ export type PublicProfile = {
   source: 'badge_import'
   observationCount: number
   connectionCount: number
+  messagingConnections: {
+    discord: boolean
+    whatsapp: boolean
+  }
   firstImportedAt: string
   lastImportedAt: string
   analysis: null | {
@@ -263,6 +269,7 @@ function escapeRegex(value: string) {
 function publicProjection() {
   return {
     _id: 0,
+    userId: 1,
     badgeId: 1,
     name: 1,
     email: 1,
@@ -299,7 +306,52 @@ export async function listPublicProfiles(query: string, page: number, pageSize =
       .toArray(),
     database.collection<AirosProfileDocument>(PROFILES).countDocuments(filter),
   ])
-  return { configured: true, profiles, total, page: safePage, pageSize }
+  const userIds = profiles.map((profile) => profile.userId)
+  const profileByUserId = new Map(profiles.map((profile) => [profile.userId, profile]))
+  const profileByUrl = new Map<string, AirosProfileDocument>()
+  for (const profile of profiles) {
+    for (const link of [profile.linkedin, profile.x, profile.instagram]) {
+      if (!link) continue
+      const normalized = link.replace(/\/$/, '')
+      profileByUrl.set(normalized, profile)
+      profileByUrl.set(`${normalized}/`, profile)
+    }
+  }
+  const urls = [...profileByUrl.keys()]
+  const socialProfiles = profiles.length ? await Promise.all(
+    ['linkedin_profiles', 'x_profiles', 'instagram_profiles'].map((collection) => database.collection(collection).find({ $or: [
+      { userId: { $in: userIds } },
+      ...(urls.length ? [{ sourceUrl: { $in: urls } }, { url: { $in: urls } }, { linkedinUrl: { $in: urls } }] : []),
+    ] }, { projection: {
+      _id: 0,
+      userId: 1,
+      sourceUrl: 1,
+      url: 1,
+      linkedinUrl: 1,
+      avatarUrl: 1,
+      profilePicUrlHD: 1,
+      profilePicUrl: 1,
+      profilePicture: 1,
+      photo: 1,
+      profile_image_url_https: 1,
+      profile_image_url: 1,
+      cachedAvatar: 1,
+    } }).toArray()),
+  ) : []
+  const badgesWithPhotos = new Set<string>()
+  for (const socialProfile of socialProfiles.flat()) {
+    if (!socialProfile.cachedAvatar && !profilePhoto(socialProfile)) continue
+    const matchedUrl = [socialProfile.sourceUrl, socialProfile.url, socialProfile.linkedinUrl]
+      .find((value): value is string => typeof value === 'string' && profileByUrl.has(value))
+    const matched = (typeof socialProfile.userId === 'string' ? profileByUserId.get(socialProfile.userId) : null)
+      || (matchedUrl ? profileByUrl.get(matchedUrl) : null)
+    if (matched) badgesWithPhotos.add(matched.badgeId)
+  }
+  const publicProfiles = profiles.map(({ userId: _userId, ...profile }) => ({
+    ...profile,
+    avatarUrl: badgesWithPhotos.has(profile.badgeId) ? `/api/airos/profiles/${encodeURIComponent(profile.badgeId)}/photo` : null,
+  }))
+  return { configured: true, profiles: publicProfiles, total, page: safePage, pageSize }
 }
 
 export const getPublicProfile = cache(async (badgeIdValue: string): Promise<PublicProfile | null> => {
@@ -313,19 +365,27 @@ export const getPublicProfile = cache(async (badgeIdValue: string): Promise<Publ
     database.collection<AirosAnalysisDocument>(ANALYSES).findOne({ badgeId, status: 'ready' }),
   ])
   if (!profile) return null
-  const socialProfiles = await Promise.all([
-    ['linkedin_profiles', profile.linkedin], ['x_profiles', profile.x], ['instagram_profiles', profile.instagram],
-  ].map(([name, link]) => {
-    const urls = link ? [link.replace(/\/$/, ''), `${link.replace(/\/$/, '')}/`] : []
-    return database.collection(name!).findOne({ $or: [
+  const [socialProfiles, discordRecord, whatsappRecord] = await Promise.all([
+    Promise.all([
+      ['linkedin_profiles', profile.linkedin], ['x_profiles', profile.x], ['instagram_profiles', profile.instagram],
+    ].map(([name, link]) => {
+      const urls = link ? [link.replace(/\/$/, ''), `${link.replace(/\/$/, '')}/`] : []
+      return database.collection(name!).findOne({ $or: [
+        { userId: profile.userId },
+        ...(urls.length ? [{ sourceUrl: { $in: urls } }, { url: { $in: urls } }, { linkedinUrl: { $in: urls } }] : []),
+      ] }, { projection: { avatarUrl: 1, profilePicUrlHD: 1, profilePicUrl: 1, profilePicture: 1, photo: 1, profile_image_url_https: 1, profile_image_url: 1, cachedAvatar: 1 } })
+    })),
+    database.collection('discord_messages').findOne({ $or: [
       { userId: profile.userId },
-      ...(urls.length ? [{ sourceUrl: { $in: urls } }, { url: { $in: urls } }, { linkedinUrl: { $in: urls } }] : []),
-    ] }, { projection: { avatarUrl: 1, profilePicUrlHD: 1, profilePicUrl: 1, profilePicture: 1, photo: 1, profile_image_url_https: 1, profile_image_url: 1 } })
-  }))
-  const photoUrls = socialProfiles.map(profilePhoto).filter((url): url is string => Boolean(url))
+      { authorUserId: profile.userId },
+      { 'author.userId': profile.userId },
+    ] }, { projection: { _id: 1 } }),
+    database.collection('whatsapp_messages').findOne({ userId: profile.userId }, { projection: { _id: 1 } }),
+  ])
+  const hasPhoto = socialProfiles.some((socialProfile) => Boolean(socialProfile && (socialProfile.cachedAvatar || profilePhoto(socialProfile))))
   return {
-    avatarUrl: photoUrls[0] || null,
-    avatarAlternatives: photoUrls.slice(1),
+    avatarUrl: hasPhoto ? `/api/airos/profiles/${encodeURIComponent(profile.badgeId)}/photo` : null,
+    avatarAlternatives: [],
     badgeId: profile.badgeId,
     name: profile.name,
     email: profile.email || null,
@@ -338,6 +398,7 @@ export const getPublicProfile = cache(async (badgeIdValue: string): Promise<Publ
     source: 'badge_import',
     observationCount: profile.observationCount || 0,
     connectionCount,
+    messagingConnections: { discord: Boolean(discordRecord), whatsapp: Boolean(whatsappRecord) },
     firstImportedAt: profile.firstImportedAt.toISOString(),
     lastImportedAt: profile.lastImportedAt.toISOString(),
     analysis: analysis?.headline && analysis.summary && analysis.interests && analysis.conversationStarters && analysis.generatedAt
