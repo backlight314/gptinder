@@ -220,7 +220,7 @@ function Profile({ user, initial, initialUserId, next, onUserId, back }: { user:
           <h1 className="text-4xl font-semibold tracking-tight">Review {user === 'a' ? 'the first' : 'the second'} personality.</h1>
           <p className="mt-2 text-muted-foreground">Choose someone already in the directory, or import a new profile. The personality fields stay entirely user-authored.</p>
         </div>
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid items-start gap-6 lg:grid-cols-2">
           <section className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-7">
             <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[.18em] text-primary">Choose a person</p><h2 className="mt-2 text-xl font-semibold">{user === 'a' ? 'Person one' : 'Person two'} from your stored profiles</h2><p className="mt-1 text-xs text-muted-foreground">These cards use the same people and badge identities as the home directory.</p></div><Button variant={mode === 'new' ? 'primary' : 'secondary'} onClick={startNewProfile}><Link2 size={16} /> Import a new profile</Button></div>
             {loadingStored && <p className="mt-5 text-sm text-muted-foreground">Loading stored profiles…</p>}
@@ -229,7 +229,8 @@ function Profile({ user, initial, initialUserId, next, onUserId, back }: { user:
             {!loadingStored && storedProfiles.length > 0 && <div className="mt-5 grid gap-3 sm:grid-cols-2">{storedProfiles.map(profile => <StoredProfileCard key={`${profile.userId}-${profile.badgeId ?? 'persona'}`} profile={profile} selected={mode === 'stored' && profile.userId === userId} onSelect={() => selectStoredProfile(profile)} />)}</div>}
             {mode === 'new' && <p className="mt-4 text-xs text-muted-foreground">New profile mode is active. Add the required URLs and personality details below.</p>}
           </section>
-          {mode === 'new' ? <section className="rounded-3xl border border-primary/20 bg-primary/5 p-5 shadow-sm sm:p-7">
+          <form onSubmit={event => { event.preventDefault(); if (isValid && !saving) void savePersona() }} className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-8">
+            {mode === 'new' ? <section className="rounded-3xl border border-primary/20 bg-primary/5 p-5 shadow-sm sm:p-7">
               <div className="flex items-start gap-3">
                 <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground"><Link2 size={17} /></span>
                 <div><h2 className="font-semibold">Store social profiles</h2><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Add one profile per platform. This stores raw profile data, posts, and comments without changing the personality below or creating duplicates.</p></div>
@@ -257,9 +258,7 @@ function Profile({ user, initial, initialUserId, next, onUserId, back }: { user:
               {importStatus && <p role="status" className="mt-4 rounded-xl bg-emerald-500/10 p-3 text-xs leading-relaxed text-emerald-700 dark:text-emerald-300">{importStatus}</p>}
               {importError && <p role="alert" className="mt-4 rounded-xl bg-destructive/10 p-3 text-xs leading-relaxed text-destructive">{importError}</p>}
             </section> : <section className="rounded-3xl border border-primary/20 bg-primary/5 p-5 shadow-sm sm:p-7"><div className="flex items-start gap-3"><span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground"><Check size={17} /></span><div><h2 className="font-semibold">Stored profile selected</h2><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Review or edit the personality fields below, then save this profile for {user === 'a' ? 'person one' : 'person two'}.</p></div></div><dl className="mt-5 space-y-3 text-sm"><div><dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Name</dt><dd className="mt-1 font-semibold">{persona.name || 'Add a name below.'}</dd></div><div><dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Bio</dt><dd className="mt-1 leading-relaxed">{persona.bio || 'Add a concise description below.'}</dd></div><div><dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Traits and interests</dt><dd className="mt-1 leading-relaxed">{[...persona.traits, ...persona.interests].length ? [...persona.traits, ...persona.interests].join(' · ') : 'Add traits and interests below.'}</dd></div><div><dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Values and conversation style</dt><dd className="mt-1 leading-relaxed">{[...persona.values, persona.style].filter(Boolean).join(' · ') || 'Add values and a conversation style below.'}</dd></div></dl><div className="mt-5 border-t border-primary/15 pt-4"><Button variant="secondary" onClick={startNewProfile}><Link2 size={16} /> Import a different profile from URLs</Button></div></section>}
-        </div>
-        <div className="mt-6 grid gap-6 lg:grid-cols-[1.1fr_.9fr]">
-          <form onSubmit={event => { event.preventDefault(); if (isValid && !saving) void savePersona() }} className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-8">
+            <div className="mt-7 border-t border-border pt-7">
             <div className="grid gap-5">
               <label htmlFor={`name-${user}`}><span className="text-sm font-semibold">Name</span><input id={`name-${user}`} required maxLength={80} value={persona.name} onChange={event => change('name', event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none ring-primary focus:ring-2" /></label>
               <label htmlFor={`bio-${user}`}><span className="text-sm font-semibold">Bio</span><span className="mt-1 block text-xs text-muted-foreground">A short, factual self-description.</span><textarea id={`bio-${user}`} required maxLength={600} rows={4} value={persona.bio} onChange={event => change('bio', event.target.value)} className="mt-2 w-full resize-y rounded-xl border border-border bg-background p-3 text-sm outline-none ring-primary focus:ring-2" /></label>
@@ -280,8 +279,11 @@ function Profile({ user, initial, initialUserId, next, onUserId, back }: { user:
             {saveError && <p role="alert" className="mt-5 rounded-xl bg-destructive/10 p-3 text-xs leading-relaxed text-destructive">{saveError}</p>}
             {linksNeedImport && <p className="mt-5 rounded-xl bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-700 dark:text-amber-300">Social links are entered but not imported yet. You can save this persona now; use Store social data to attach them to the same user record later.</p>}
             <div className="mt-8 flex justify-end"><Button type="submit" disabled={!canSave}>{saving ? 'Saving persona…' : mode === 'stored' ? 'Save selected profile and continue' : 'Save persona and continue'} <ArrowRight size={17} /></Button></div>
+            </div>
           </form>
-          <ProfilePreview persona={persona} user={user} />
+          <div className="lg:col-start-1">
+            <ProfilePreview persona={persona} user={user} />
+          </div>
         </div>
       </div>
     </main>
